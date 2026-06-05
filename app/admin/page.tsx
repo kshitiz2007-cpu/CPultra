@@ -1,22 +1,4 @@
-'use client';
-export const dynamic = "force-dynamic";
-
-
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
-import { useRouter } from 'next/navigation';
-
-// All your custom Admin Modules!
-import AdminOverview from './AdminOverview';
-import AiQuizBuilder from './AiQuizBuilder';
-import ResourceManager from './ResourceManager';
-import CsvImporter from './CsvImporter';
-import PaymentsManager from './PaymentsManager';
-import StudentsManager from './StudentsManager';
-import QuizManager from './QuizManager';
-
-import {
-  LayoutDashboard, FileQuestion, Users, FileText,
+'(  LayoutDashboard, FileQuestion, Users, FileText,
   CreditCard, Sparkles, CalendarClock, TableProperties,
   LogOut
 } from 'lucide-react';
@@ -155,3 +137,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
