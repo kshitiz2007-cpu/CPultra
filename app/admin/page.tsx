@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
+import AiQuizBuilder from './AiQuizBuilder';
 import { 
   LayoutDashboard, FileQuestion, Users, FileText, 
   CreditCard, Sparkles, CalendarClock, TableProperties, 
@@ -220,12 +221,16 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* PLACEHOLDERS FOR OTHER TABS */}
-        {['aigen', 'resources', 'students', 'payments', 'scheduled', 'csvimport'].includes(activeTab) && (
+       {activeTab === 'aigen' && (
+          <AiQuizBuilder/>
+        )}
+
+        
+        {['resources', 'students', 'payments', 'scheduled', 'csvimport'].includes(activeTab) && (
           <div className="glass-card p-12 text-center flex flex-col items-center justify-center border-dashed border-2 border-emerald-900/20">
-            <h3 className="text-xl font-bold text-emerald-900 mb-2 capitalize font-serif">{activeTab.replace('aigen', 'AI Generator')}</h3>
+            <h3 className="text-xl font-bold text-emerald-900 mb-2 capitalize font-serif">{activeTab}</h3>
             <p className="text-sm text-gray-500 mb-6 max-w-md">
-              This module handles the dedicated logic for {activeTab}. You can extract the specific component logic from the original HTML file and place it here.
+              This module handles the dedicated logic for {activeTab}.
             </p>
           </div>
         )}
