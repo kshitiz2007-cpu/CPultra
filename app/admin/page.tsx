@@ -1,4 +1,4 @@
-'(  LayoutDashboard, FileQuestion, Users, FileText,
+-'('(  LayoutDashboard, FileQuestion, Users, FileText,
   CreditCard, Sparkles, CalendarClock, TableProperties,
   LogOut
 } from 'lucide-react';
