@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Clock, ChevronRight, ChevronLeft, CheckCircle2, Languages } from 'lucide-react';
 
-// 1. Normal, safe import! (No more Webpack minification bugs)
-import { getSupabase } from '@/lib/supabaseClient';
+// FIXED: We are importing 'supabase' exactly as it exists in your file
+import { supabase } from '@/lib/supabaseClient';
 
 export default function QuizPlayerPage() {
   const router = useRouter();
@@ -22,14 +22,12 @@ export default function QuizPlayerPage() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [lang, setLang] = useState<'en' | 'hi'>('en');
 
-  // BUILD-SAFE INITIALIZATION WITH SAFETY NET
+  // SAFE INITIALIZATION
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     async function initQuiz() {
       try {
-        const supabase = getSupabase();
-
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError || !session) {
           window.location.href = '/';
@@ -136,7 +134,6 @@ export default function QuizPlayerPage() {
         completed_at: new Date().toISOString()
       };
 
-      const supabase = getSupabase();
       const { error } = await supabase.from('attempts').insert([attempt]);
       
       if (error) {
