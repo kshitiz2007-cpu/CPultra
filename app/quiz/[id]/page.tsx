@@ -1,9 +1,11 @@
 'use client';
-export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Clock, ChevronRight, ChevronLeft, CheckCircle2, Languages } from 'lucide-react';
+
+// 1. Normal, safe import! (No more Webpack minification bugs)
+import { getSupabase } from '@/lib/supabaseClient';
 
 export default function QuizPlayerPage() {
   const router = useRouter();
@@ -20,38 +22,44 @@ export default function QuizPlayerPage() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [lang, setLang] = useState<'en' | 'hi'>('en');
 
-  // BUILD-SAFE INITIALIZATION
+  // BUILD-SAFE INITIALIZATION WITH SAFETY NET
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     async function initQuiz() {
-      const { getSupabase } = await import('@/lib/supabaseClient');
-      const supabase = getSupabase();
+      try {
+        const supabase = getSupabase();
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/');
-        return;
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !session) {
+          window.location.href = '/';
+          return;
+        }
+        
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+        setUser(profile);
+
+        const { data: quizData, error } = await supabase.from('quizzes').select('*').eq('id', quizId).single();
+
+        if (error || !quizData) {
+          alert('Quiz not found!');
+          window.location.href = '/dashboard';
+          return;
+        }
+
+        setQuiz(quizData);
+        setTimeLeft(quizData.time_limit * 60);
+        setLoading(false);
+
+      } catch (err) {
+        console.error("Critical Quiz Load Error:", err);
+        alert("Failed to load the quiz. Redirecting to dashboard.");
+        window.location.href = '/dashboard';
       }
-      
-      const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-      setUser(profile);
-
-      const { data: quizData, error } = await supabase.from('quizzes').select('*').eq('id', quizId).single();
-
-      if (error || !quizData) {
-        alert('Quiz not found!');
-        router.push('/dashboard');
-        return;
-      }
-
-      setQuiz(quizData);
-      setTimeLeft(quizData.time_limit * 60);
-      setLoading(false);
     }
 
     initQuiz();
-  }, [quizId, router]);
+  }, [quizId]);
 
   // TIMER LOGIC
   useEffect(() => {
@@ -82,67 +90,69 @@ export default function QuizPlayerPage() {
     if (!quiz || !user) return;
     setSubmitting(true);
 
-    let correctCount = 0;
-    let wrongCount = 0;
-    let skippedCount = 0;
+    try {
+      let correctCount = 0;
+      let wrongCount = 0;
+      let skippedCount = 0;
 
-    const detailedResponses = quiz.questions.map((q: any) => {
-      const selectedIndex = answers[q.id];
-      const isCorrect = selectedIndex === q.correct;
-      
-      if (selectedIndex === undefined) {
-        skippedCount++;
-      } else if (isCorrect) {
-        correctCount++;
-      } else {
-        wrongCount++;
-      }
-      
-      return {
-        question: q.text,
-        selected_answer: selectedIndex !== undefined ? q.options[selectedIndex] : 'Skipped',
-        correct_answer: q.options[q.correct],
-        isCorrect: isCorrect,
-        explanation: q.explanation || null
+      const detailedResponses = quiz.questions.map((q: any) => {
+        const selectedIndex = answers[q.id];
+        const isCorrect = selectedIndex === q.correct;
+        
+        if (selectedIndex === undefined) {
+          skippedCount++;
+        } else if (isCorrect) {
+          correctCount++;
+        } else {
+          wrongCount++;
+        }
+        
+        return {
+          question: q.text,
+          selected_answer: selectedIndex !== undefined ? q.options[selectedIndex] : 'Skipped',
+          correct_answer: q.options[q.correct],
+          isCorrect: isCorrect,
+          explanation: q.explanation || null
+        };
+      });
+
+      const totalQuestions = quiz.questions.length;
+      const finalScore = Math.round((correctCount / totalQuestions) * 100);
+
+      const attempt = {
+        id: `a_${Date.now()}`,
+        user_id: user.id,
+        user_name: user.name || user.email || 'Student',
+        quiz_id: quiz.id,
+        quiz_title: quiz.title,
+        quiz_title_hi: quiz.titleHi || '',
+        category: quiz.category || 'UPSC',
+        score: finalScore,
+        correct: correctCount,
+        wrong: wrongCount,
+        skipped: skippedCount,
+        total: totalQuestions,
+        details: detailedResponses,
+        completed_at: new Date().toISOString()
       };
-    });
 
-    const totalQuestions = quiz.questions.length;
-    const finalScore = Math.round((correctCount / totalQuestions) * 100);
+      const supabase = getSupabase();
+      const { error } = await supabase.from('attempts').insert([attempt]);
+      
+      if (error) {
+        alert(`Database Error: ${error.message}`);
+        console.error(error);
+        setSubmitting(false);
+        return;
+      }
 
-    // EXACT MATCH to your database columns!
-    const attempt = {
-      id: `a_${Date.now()}`, // Prevents the 400 Bad Request error
-      user_id: user.id,
-      user_name: user.name || user.email || 'Student',
-      quiz_id: quiz.id,
-      quiz_title: quiz.title,
-      quiz_title_hi: quiz.titleHi || '',
-      category: quiz.category || 'UPSC',
-      score: finalScore,
-      correct: correctCount,
-      wrong: wrongCount,
-      skipped: skippedCount,
-      total: totalQuestions,
-      details: detailedResponses, // Matches the column name in your database
-      completed_at: new Date().toISOString()
-    };
+      window.location.href = `/quiz/${quiz.id}/result`;
 
-    // Dynamically import supabase to prevent build errors
-    const { getSupabase } = await import('@/lib/supabaseClient');
-    const supabase = getSupabase();
-
-    const { error } = await supabase.from('attempts').insert([attempt]);
-    
-    if (error) {
-      // This will now print the EXACT database error on your screen if it fails
-      alert(`Database Error: ${error.message}`);
-      console.error(error);
+    } catch (err) {
+      console.error("Submission crash:", err);
+      alert("A critical error occurred while submitting.");
       setSubmitting(false);
-      return;
     }
-
-    router.push(`/quiz/${quiz.id}/result`);
   };
 
   if (loading) {
@@ -270,7 +280,7 @@ export default function QuizPlayerPage() {
       </div>
 
       <div className="mt-6 text-center">
-        <button onClick={() => { if (confirm('Abandon this quiz? Progress will be lost.')) router.push('/dashboard'); }} className="text-sm font-semibold text-gray-400 hover:text-red-500 transition-colors uppercase tracking-wider">
+        <button onClick={() => { if (confirm('Abandon this quiz? Progress will be lost.')) window.location.href = '/dashboard'; }} className="text-sm font-semibold text-gray-400 hover:text-red-500 transition-colors uppercase tracking-wider">
           Abandon Quiz
         </button>
       </div>
