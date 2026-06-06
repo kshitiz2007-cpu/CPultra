@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Trophy, CheckCircle2, XCircle, MinusCircle, Home, RotateCcw, ChevronRight } from 'lucide-react';
 
+// NORMAL, SAFE IMPORT (Just like we did on the quiz page)
+import { supabase } from '@/lib/supabaseClient';
+
 export default function QuizResultPage() {
   const router = useRouter();
   const params = useParams();
@@ -14,39 +17,39 @@ export default function QuizResultPage() {
 
   useEffect(() => {
     async function fetchResult() {
-      // Build-safe initialization
-      if (typeof window === 'undefined') return;
-      const { getSupabase } = await import('@/lib/supabaseClient');
-      const supabase = getSupabase();
+      try {
+        // 1. Get User
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          window.location.href = '/';
+          return;
+        }
 
-      // 1. Get User
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/');
-        return;
+        // 2. Fetch the most recent attempt for this specific quiz by this user
+        const { data, error } = await supabase
+          .from('attempts')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .eq('quiz_id', quizId)
+          .order('completed_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (error || !data) {
+          console.error("Could not fetch result:", error);
+        } else {
+          setAttempt(data);
+        }
+      } catch (err) {
+        console.error("Error loading result:", err);
+      } finally {
+        // This ensures the spinner ALWAYS stops, even if there's an error
+        setLoading(false); 
       }
-
-      // 2. Fetch the most recent attempt for this specific quiz by this user
-      const { data, error } = await supabase
-        .from('attempts')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .eq('quiz_id', quizId)
-        .order('completed_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (error || !data) {
-        console.error("Could not fetch result:", error);
-      } else {
-        setAttempt(data);
-      }
-      
-      setLoading(false);
     }
 
     fetchResult();
-  }, [quizId, router]);
+  }, [quizId]);
 
   if (loading) {
     return (
@@ -61,7 +64,7 @@ export default function QuizResultPage() {
       <div className="min-h-screen flex flex-col items-center justify-center text-center p-4">
         <h1 className="text-2xl font-bold text-gray-800 mb-2">Result not found</h1>
         <p className="text-gray-500 mb-6">We couldn't load your quiz result.</p>
-        <button onClick={() => router.push('/dashboard')} className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold">
+        <button onClick={() => window.location.href = '/dashboard'} className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold">
           Go to Dashboard
         </button>
       </div>
@@ -170,13 +173,13 @@ export default function QuizResultPage() {
       {/* BOTTOM ACTIONS */}
       <div className="mt-10 flex gap-4">
         <button 
-          onClick={() => router.push('/dashboard')}
+          onClick={() => window.location.href = '/dashboard'}
           className="flex-1 bg-white border-2 border-gray-200 text-gray-700 hover:border-emerald-500 hover:text-emerald-700 font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm"
         >
           <Home className="w-5 h-5" /> Dashboard
         </button>
         <button 
-          onClick={() => router.push(`/quiz/${quizId}`)}
+          onClick={() => window.location.href = `/quiz/${quizId}`}
           className="flex-1 bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md"
         >
           <RotateCcw className="w-5 h-5" /> Retake Quiz
