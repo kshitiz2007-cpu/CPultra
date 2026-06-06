@@ -12,8 +12,8 @@ import {
 interface Resource {
   id: string;
   title: string;
-  type: string;
-  url: string;
+  file_type: string; // Updated to match DB
+  file_url: string;  // Updated to match DB
   category: string;
   section: string;
 }
@@ -45,7 +45,7 @@ export default function StudentResourcesPage() {
       const { data } = await supabase
         .from('resources')
         .select('*')
-        .eq('active', true)
+        // .eq('active', true) <-- REMOVED because column doesn't exist
         .order('created_at', { ascending: false });
 
       if (data) setResources(data);
@@ -173,27 +173,27 @@ export default function StudentResourcesPage() {
                         
                         <div className="flex items-start gap-4">
                           <div className={`p-3 rounded-xl shrink-0 shadow-sm ${
-                            resource.type === 'pdf' ? 'bg-rose-100 text-rose-600' : 'bg-indigo-100 text-indigo-600'
+                            resource.file_type === 'pdf' ? 'bg-rose-100 text-rose-600' : 'bg-indigo-100 text-indigo-600'
                           }`}>
-                            {resource.type === 'pdf' ? <FileText className="w-6 h-6" /> : <ExternalLink className="w-6 h-6" />}
+                            {resource.file_type === 'pdf' ? <FileText className="w-6 h-6" /> : <ExternalLink className="w-6 h-6" />}
                           </div>
                           <div>
                             <h3 className="text-md font-bold text-gray-900 mb-1 group-hover:text-blue-700 transition-colors line-clamp-2">
                               {resource.title}
                             </h3>
                             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest bg-white/60 px-2 py-0.5 rounded">
-                              {resource.type.toUpperCase()}
+                              {(resource.file_type || 'LINK').toUpperCase()}
                             </span>
                           </div>
                         </div>
 
                         <a 
-                          href={resource.url}
+                          href={resource.file_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="shrink-0 p-3 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white rounded-xl transition-all shadow-sm group-hover:scale-105"
                         >
-                          {resource.type === 'pdf' ? <Download className="w-5 h-5" /> : <ExternalLink className="w-5 h-5" />}
+                          {resource.file_type === 'pdf' ? <Download className="w-5 h-5" /> : <ExternalLink className="w-5 h-5" />}
                         </a>
 
                       </div>
