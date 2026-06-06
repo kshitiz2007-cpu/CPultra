@@ -4,10 +4,9 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { 
   Activity, Users, BookOpen, Target, 
-  Clock, Loader2, Award, TrendingUp 
+  Clock, Loader2, Award, TrendingUp, Radio
 } from 'lucide-react';
 
-// Helper function to format timestamps into "2 hours ago", "Just now", etc.
 function timeAgo(dateString: string) {
   const date = new Date(dateString);
   const now = new Date();
@@ -26,12 +25,13 @@ export default function AdminOverview() {
   const [stats, setStats] = useState({ students: 0, quizzes: 0, attempts: 0 });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isLive, setIsLive] = useState(false); // Tracks if the realtime connection is active
 
   useEffect(() => {
+    let isMounted = true;
+
+    // The function that actually grabs the data
     async function fetchDashboardData() {
-      setLoading(true);
-      
-      // 1. Fetch Global Stats (Counts)
       const { count: studentCount } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true })
@@ -45,28 +45,61 @@ export default function AdminOverview() {
         .from('attempts')
         .select('*', { count: 'exact', head: true });
 
-      setStats({
-        students: studentCount || 0,
-        quizzes: quizCount || 0,
-        attempts: attemptCount || 0
-      });
-
-      // 2. Fetch Recent Activities (Latest Attempts)
-      const { data: activities } = await supabase
+      const { data: activities, error } = await supabase
         .from('attempts')
         .select(`
           id, score, created_at,
-          profiles:user_id (name, email),
-          quizzes:quiz_id (title)
+          profiles (name, email),
+          quizzes (title)
         `)
         .order('created_at', { ascending: false })
         .limit(8);
 
-      if (activities) setRecentActivity(activities);
-      setLoading(false);
+      if (isMounted) {
+        setStats({
+          students: studentCount || 0,
+          quizzes: quizCount || 0,
+          attempts: attemptCount || 0
+        });
+        if (!error && activities) {
+          setRecentActivity(activities);
+        }
+        setLoading(false);
+      }
     }
     
+    // 1. Do the initial load
     fetchDashboardData();
+
+    // 2. Turn on the "Antenna" to listen for Live Updates
+    const realtimeChannel = supabase.channel('admin-dashboard')
+      .on(
+        'postgres_changes', 
+        { event: '*', schema: 'public', table: 'profiles' }, 
+        (payload) => {
+          console.log("Realtime: Profile updated!", payload);
+          fetchDashboardData(); // Silently refresh data in the background
+        }
+      )
+      .on(
+        'postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'attempts' }, 
+        (payload) => {
+          console.log("Realtime: New attempt!", payload);
+          fetchDashboardData(); // Silently refresh data in the background
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setIsLive(true);
+        }
+      });
+
+    // Cleanup the antenna when you leave the page
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(realtimeChannel);
+    };
   }, []);
 
   if (loading) {
@@ -79,7 +112,7 @@ export default function AdminOverview() {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in pb-20">
       
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -90,6 +123,14 @@ export default function AdminOverview() {
             Real-time insights and recent student activities.
           </p>
         </div>
+        
+        {/* Live Status Indicator */}
+        {isLive && (
+          <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full border border-emerald-200 shadow-sm w-fit">
+            <Radio className="w-4 h-4 animate-pulse text-emerald-500" />
+            <span className="text-xs font-bold uppercase tracking-widest">Live Updates Active</span>
+          </div>
+        )}
       </div>
 
       {/* KPI STAT CARDS */}
@@ -145,7 +186,7 @@ export default function AdminOverview() {
           ) : (
             <div className="space-y-6">
               {recentActivity.map((activity, index) => (
-                <div key={activity.id || index} className="flex items-start gap-4 group">
+                <div key={activity.id || index} className="flex items-start gap-4 group animate-fade-in">
                   <div className="mt-1 relative">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-100 to-teal-100 flex items-center justify-center border border-emerald-200 z-10 relative">
                       <Award className="w-5 h-5 text-emerald-600" />

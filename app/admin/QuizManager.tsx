@@ -2,31 +2,31 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { FileQuestion, Save, Clock, Loader2, Layers } from 'lucide-react';
+import { 
+  FileQuestion, Loader2, Trash2, Save, 
+  CheckCircle, ToggleLeft, ToggleRight
+} from 'lucide-react';
 
 interface Quiz {
   id: string;
   title: string;
   category: string;
-  section: string; // Used as Subsection
   time_limit: number;
   active: boolean;
   created_at: string;
 }
 
 const CATEGORIES = [
-  'History', 'Geography', 'Polity', 'Economy', 
-  'Science & Tech', 'Environment', 'Current Affairs', 
+  'History', 'Geography', 'Polity', 'Economy',
+  'Science & Tech', 'Environment', 'Current Affairs',
   'Maths', 'Reasoning', 'GS'
 ];
 
 export default function QuizManager() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-
-  // Local state to handle typing in the subsection text box without causing lag
-  const [localSections, setLocalSections] = useState<Record<string, string>>({});
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [successId, setSuccessId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchQuizzes();
@@ -34,138 +34,112 @@ export default function QuizManager() {
 
   const fetchQuizzes = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('quizzes')
-      .select('id, title, category, section, time_limit, active, created_at')
+      .select('*')
       .order('created_at', { ascending: false });
 
-    if (data) {
-      setQuizzes(data);
-      // Populate local state for the input fields
-      const sectionsMap: Record<string, string> = {};
-      data.forEach(q => sectionsMap[q.id] = q.section || '');
-      setLocalSections(sectionsMap);
-    }
+    if (data) setQuizzes(data);
     setLoading(false);
   };
 
-  const handleCategoryChange = async (quizId: string, newCategory: string) => {
-    setUpdatingId(quizId);
-    const { error } = await supabase.from('quizzes').update({ category: newCategory }).eq('id', quizId);
-    if (!error) setQuizzes(quizzes.map(q => q.id === quizId ? { ...q, category: newCategory } : q));
-    setUpdatingId(null);
-  };
-
-  // Save the custom subsection string to the DB
-  const saveSubsection = async (quizId: string) => {
-    const newSection = localSections[quizId];
-    setUpdatingId(quizId);
-    const { error } = await supabase.from('quizzes').update({ section: newSection }).eq('id', quizId);
+  const handleUpdateCategory = async (id: string, newCat: string) => {
+    setActionLoadingId(id);
+    const { error } = await supabase.from('quizzes').update({ category: newCat }).eq('id', id);
     if (!error) {
-      setQuizzes(quizzes.map(q => q.id === quizId ? { ...q, section: newSection } : q));
-    } else {
-      alert("Failed to save subsection.");
-    }
-    setUpdatingId(null);
+      setQuizzes(quizzes.map(q => q.id === id ? { ...q, category: newCat } : q));
+      showSuccess(id);
+    } else alert("Failed to update category.");
+    setActionLoadingId(null);
   };
 
-  const toggleStatus = async (quizId: string, currentStatus: boolean) => {
-    setUpdatingId(quizId);
-    const { error } = await supabase.from('quizzes').update({ active: !currentStatus }).eq('id', quizId);
-    if (!error) setQuizzes(quizzes.map(q => q.id === quizId ? { ...q, active: !currentStatus } : q));
-    setUpdatingId(null);
+  const handleToggleActive = async (id: string, currentStatus: boolean) => {
+    setActionLoadingId(id);
+    const newStatus = !currentStatus;
+    const { error } = await supabase.from('quizzes').update({ active: newStatus }).eq('id', id);
+    if (!error) {
+      setQuizzes(quizzes.map(q => q.id === id ? { ...q, active: newStatus } : q));
+      showSuccess(id);
+    } else alert("Failed to update status.");
+    setActionLoadingId(null);
+  };
+
+  const deleteQuiz = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this quiz forever? This will also delete all student attempts for this quiz!')) return;
+    setActionLoadingId(id);
+    const { error } = await supabase.from('quizzes').delete().eq('id', id);
+    if (!error) {
+      setQuizzes(quizzes.filter(q => q.id !== id));
+    } else alert("Failed to delete quiz.");
+    setActionLoadingId(null);
+  };
+
+  const showSuccess = (id: string) => {
+    setSuccessId(id);
+    setTimeout(() => setSuccessId(null), 2000);
   };
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-emerald-950 font-serif tracking-tight flex items-center gap-3">
-            <FileQuestion className="w-8 h-8 text-emerald-600" /> Manage Curriculum
-          </h2>
-          <p className="text-sm text-gray-500 font-medium mt-1">
-            Re-assign quizzes to specific subjects and type custom Subsections (e.g., "Ancient History").
-          </p>
-        </div>
-      </div>
-
+    <div className="space-y-8 animate-fade-in w-full pb-20">
       <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-sm overflow-hidden">
-        <div className="p-0 overflow-x-auto">
+        <div className="p-6 border-b border-white/60 bg-white/30">
+           <h3 className="font-black text-emerald-950 flex items-center gap-2 text-xl">
+             <FileQuestion className="w-6 h-6 text-emerald-600" /> Organize Existing Quizzes
+           </h3>
+           <p className="text-sm text-gray-600 mt-1 font-medium">Instantly move old quizzes to valid subject folders and toggle their visibility.</p>
+        </div>
+        
+        <div className="overflow-x-auto">
           {loading ? (
-            <div className="p-16 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
-          ) : quizzes.length === 0 ? (
-            <div className="p-16 text-center text-gray-500 font-bold">No quizzes found.</div>
+             <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
           ) : (
-            <table className="w-full text-left text-sm">
-              <thead className="bg-white/40 text-[11px] uppercase text-gray-500 font-bold tracking-wider border-b border-white/60">
+            <table className="w-full text-left min-w-[800px]">
+              <thead className="bg-gray-50/80 text-xs uppercase text-gray-500 border-b border-gray-200">
                 <tr>
                   <th className="px-6 py-4">Quiz Title</th>
-                  <th className="px-6 py-4">Subject Folder</th>
-                  <th className="px-6 py-4">Subsection (Type & Save)</th>
-                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4">Subject Folder (Move)</th>
+                  <th className="px-6 py-4 text-center">Visibility (Active)</th>
+                  <th className="px-6 py-4 text-center">Delete</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/40">
-                {quizzes.map((quiz) => (
-                  <tr key={quiz.id} className="hover:bg-white/30 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-gray-900">{quiz.title}</div>
-                      <div className="text-xs text-gray-500 flex items-center gap-1 mt-1">
-                        <Clock className="w-3 h-3" /> {quiz.time_limit} mins
-                      </div>
-                    </td>
+              <tbody className="divide-y divide-gray-100 bg-white/20">
+                {quizzes.map((q) => (
+                  <tr key={q.id} className="hover:bg-white/60 transition-colors">
                     
+                    <td className="px-6 py-4">
+                      <div className="font-bold text-gray-900 line-clamp-1">{q.title}</div>
+                      <div className="text-[10px] text-gray-400 mt-1 uppercase tracking-widest">{q.time_limit} mins</div>
+                    </td>
+
                     {/* Category Dropdown */}
                     <td className="px-6 py-4">
                       <select 
-                        value={quiz.category}
-                        onChange={(e) => handleCategoryChange(quiz.id, e.target.value)}
-                        disabled={updatingId === quiz.id}
-                        className="text-sm font-bold px-3 py-2 rounded-xl transition-all outline-none cursor-pointer bg-white/60 text-emerald-800 border border-emerald-200"
+                        className={`p-2 rounded-xl text-sm font-bold border transition-colors outline-none cursor-pointer ${successId === q.id ? 'bg-green-50 border-green-300 text-green-700' : 'bg-white border-gray-200 text-gray-700'}`}
+                        value={q.category || ''}
+                        onChange={(e) => handleUpdateCategory(q.id, e.target.value)}
+                        disabled={actionLoadingId === q.id}
                       >
-                        {CATEGORIES.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
+                        {!CATEGORIES.includes(q.category) && <option value={q.category}>{q.category} (Old)</option>}
+                        {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                       </select>
                     </td>
 
-                    {/* Custom Subsection Text Input */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="relative">
-                          <Layers className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                          <input 
-                            type="text"
-                            placeholder="e.g. Ancient India"
-                            value={localSections[quiz.id] || ''}
-                            onChange={(e) => setLocalSections({...localSections, [quiz.id]: e.target.value})}
-                            className="glass-input pl-9 pr-3 py-2 text-sm w-48 rounded-xl font-semibold text-gray-700"
-                          />
-                        </div>
-                        {/* Only show Save button if the text has changed from the database */}
-                        {localSections[quiz.id] !== (quiz.section || '') && (
-                          <button 
-                            onClick={() => saveSubsection(quiz.id)}
-                            className="p-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-xl transition-colors shadow-sm font-bold flex items-center gap-1"
-                          >
-                            <Save className="w-4 h-4" /> Save
-                          </button>
-                        )}
-                      </div>
+                    {/* Active/Draft Toggle */}
+                    <td className="px-6 py-4 text-center">
+                      <button 
+                        onClick={() => handleToggleActive(q.id, q.active)}
+                        disabled={actionLoadingId === q.id}
+                        className={`flex items-center justify-center w-28 mx-auto gap-2 p-2 rounded-xl border transition-all ${q.active ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}
+                      >
+                        {q.active ? <ToggleRight className="w-5 h-5 text-emerald-500" /> : <ToggleLeft className="w-5 h-5 text-gray-400" />}
+                        <span className="text-xs font-bold uppercase">{q.active ? 'Visible' : 'Hidden'}</span>
+                      </button>
                     </td>
 
-                    {/* Status Toggle */}
-                    <td className="px-6 py-4">
-                      <button 
-                        onClick={() => toggleStatus(quiz.id, quiz.active)}
-                        disabled={updatingId === quiz.id}
-                        className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all shadow-sm border ${
-                          quiz.active 
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
-                            : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'
-                        }`}
-                      >
-                        {quiz.active ? 'Published' : 'Draft'}
+                    {/* Delete Button */}
+                    <td className="px-6 py-4 text-center">
+                      <button onClick={() => deleteQuiz(q.id)} disabled={actionLoadingId === q.id} className="p-2 bg-white rounded-xl border border-gray-200 text-rose-500 hover:bg-rose-50 hover:border-rose-200 transition-colors shadow-sm">
+                        {actionLoadingId === q.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                       </button>
                     </td>
 
