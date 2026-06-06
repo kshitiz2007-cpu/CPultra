@@ -54,10 +54,10 @@ export default function DashboardPage() {
           .select('*', { count: 'exact', head: true })
           .eq('active', true);
           
+        // FIXED: Removed the broken .eq('active', true) filter from resources
         const { count: resourceCount } = await supabase
           .from('resources')
-          .select('*', { count: 'exact', head: true })
-          .eq('active', true);
+          .select('*', { count: 'exact', head: true });
 
         if (quizzesData) setLatestQuizzes(quizzesData);
         if (attemptsData) setAttempts(attemptsData);
