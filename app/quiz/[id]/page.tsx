@@ -112,9 +112,9 @@ export default function QuizPlayerPage() {
 
     // EXACT MATCH to your database columns!
     const attempt = {
-      id: `a_${Date.now()}`,
+      id: `a_${Date.now()}`, // Prevents the 400 Bad Request error
       user_id: user.id,
-      user_name: user.name || 'Student',
+      user_name: user.name || user.email || 'Student',
       quiz_id: quiz.id,
       quiz_title: quiz.title,
       quiz_title_hi: quiz.titleHi || '',
@@ -124,7 +124,7 @@ export default function QuizPlayerPage() {
       wrong: wrongCount,
       skipped: skippedCount,
       total: totalQuestions,
-      details: detailedResponses, // Changed to details
+      details: detailedResponses, // Matches the column name in your database
       completed_at: new Date().toISOString()
     };
 
