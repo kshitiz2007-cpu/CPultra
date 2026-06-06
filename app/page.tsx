@@ -11,11 +11,19 @@ export default function LoginPage() {
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
-    const checkUserRoleAndRedirect = async (userId: string) => {
+    // We pass the whole session now to check the email
+    const checkUserRoleAndRedirect = async (session: any) => {
+      // SUPER ADMIN OVERRIDE
+      if (session.user.email === 'kshitiz2007@gmail.com' || session.user.email === 'admin@civilprep.in') {
+        router.push('/admin');
+        return;
+      }
+
+      // Normal database check for everyone else
       const { data } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', userId)
+        .eq('id', session.user.id)
         .single();
 
       if (data?.role === 'admin') {
@@ -27,7 +35,7 @@ export default function LoginPage() {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        checkUserRoleAndRedirect(session.user.id);
+        checkUserRoleAndRedirect(session);
       } else {
         setCheckingAuth(false);
       }
@@ -35,7 +43,7 @@ export default function LoginPage() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        checkUserRoleAndRedirect(session.user.id);
+        checkUserRoleAndRedirect(session);
       }
     });
 

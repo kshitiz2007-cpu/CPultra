@@ -46,6 +46,13 @@ export default function AdminPage() {
         return;
       }
 
+      // SUPER ADMIN OVERRIDE
+      if (session.user.email === 'kshitiz2007@gmail.com' || session.user.email === 'admin@civilprep.in') {
+        setLoading(false);
+        return;
+      }
+
+      // Normal database check for everyone else
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')

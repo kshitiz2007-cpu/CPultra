@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { 
   PlayCircle, Clock, BookOpen, Award, 
   Sparkles, Loader2, ArrowRight, Layers, 
-  FileText, Target, CheckCircle
+  FileText, Target, CheckCircle, LogOut 
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -48,13 +48,12 @@ export default function DashboardPage() {
           .select('*')
           .eq('user_id', session.user.id);
 
-        // 3. Fetch Platform Totals for the new Stats Cards
+        // 3. Fetch Platform Totals for the Stats Cards
         const { count: quizCount } = await supabase
           .from('quizzes')
           .select('*', { count: 'exact', head: true })
           .eq('active', true);
           
-        // FIXED: Removed the broken .eq('active', true) filter from resources
         const { count: resourceCount } = await supabase
           .from('resources')
           .select('*', { count: 'exact', head: true });
@@ -72,6 +71,12 @@ export default function DashboardPage() {
 
     loadDashboardData();
   }, [router]);
+
+  // --- LOGOUT FUNCTION ---
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/');
+  };
 
   // Derived Stats Calculations
   const totalAttempted = attempts.length;
@@ -92,7 +97,7 @@ export default function DashboardPage() {
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6 pb-24 space-y-8 animate-fade-in">
       
-      {/* 1. HEADER SECTION */}
+      {/* 1. HEADER SECTION WITH LOGOUT */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl md:text-4xl font-black text-emerald-950 tracking-tight font-serif">
@@ -102,6 +107,15 @@ export default function DashboardPage() {
             Ready to continue your preparation today?
           </p>
         </div>
+        
+        {/* NEW LOGOUT BUTTON */}
+        <button 
+          onClick={handleLogout}
+          className="p-3 md:px-5 md:py-2.5 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 rounded-xl transition-colors shadow-sm flex items-center gap-2 border border-rose-100 font-bold"
+        >
+          <LogOut className="w-5 h-5" />
+          <span className="hidden md:inline text-sm tracking-wide">Sign Out</span>
+        </button>
       </div>
 
       {/* 2. EXPANDED BENTO GRID */}
