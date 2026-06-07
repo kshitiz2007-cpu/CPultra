@@ -159,7 +159,7 @@ export default function AdminPage() {
         <div className="max-w-7xl mx-auto w-full">
 
           {/* OVERVIEW TAB */}
-          {activeTab === 'overview' && <AdminOverview />}
+{activeTab === 'overview' && <AdminOverview setActiveTab={setActiveTab} />}
 
           {/* QUIZZES TAB */}
           {activeTab === 'quizzes' && <QuizManager />}
