@@ -1,16 +1,44 @@
 'use client';
+export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, Users, FileText, Settings, LogOut, Loader2, CheckCircle2 } from 'lucide-react';
-
-// SAFE IMPORT
 import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
 
-export default function AdminDashboardPage() {
+// All your custom Admin Modules!
+import AdminOverview from './AdminOverview';
+import AiQuizBuilder from './AiQuizBuilder';
+import ResourceManager from './ResourceManager';
+import CsvImporter from './CsvImporter';
+import PaymentsManager from './PaymentsManager';
+import StudentsManager from './StudentsManager';
+import QuizManager from './QuizManager';
+
+import {
+  LayoutDashboard, FileQuestion, Users, FileText,
+  CreditCard, Sparkles, CalendarClock, TableProperties,
+  LogOut
+} from 'lucide-react';
+
+// Sidebar Navigation Configuration
+const ADMIN_TABS = [
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'quizzes', label: 'Quizzes', icon: FileQuestion },
+  { id: 'aigen', label: 'AI Generate', icon: Sparkles },
+  { id: 'resources', label: 'Resources', icon: FileText },
+  { id: 'students', label: 'Students', icon: Users },
+  { id: 'payments', label: 'Payments', icon: CreditCard },
+  { id: 'scheduled', label: 'Scheduled', icon: CalendarClock },
+  { id: 'csvimport', label: 'CSV Import', icon: TableProperties },
+];
+
+export default function AdminPage() {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
-  const [adminEmail, setAdminEmail] = useState('');
 
-  useEffect(() => {
+  // Authenticate and Verify Admin Privileges
+ useEffect(() => {
     async function checkAdmin() {
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -24,7 +52,6 @@ export default function AdminDashboardPage() {
         
         // SUPER ADMIN OVERRIDE
         if (email === 'kshitiz2007@gmail.com' || email === 'admin@civilprep.in') {
-          setAdminEmail(email);
           setLoading(false);
           return;
         }
@@ -41,7 +68,7 @@ export default function AdminDashboardPage() {
           return;
         }
 
-        setAdminEmail(email);
+        // Stop the loading spinner!
         setLoading(false);
 
       } catch (err) {
@@ -51,67 +78,134 @@ export default function AdminDashboardPage() {
     }
 
     checkAdmin();
-  }, []); 
+  }, []); // <-- This empty array is crucial to prevent the infinite loop!
+
+      // Normal database check for everyone else
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profile?.role !== 'admin') {
+        router.push('/dashboard');
+      } else {
+        setLoading(false);
+      }
+    }
+    checkAdmin();
+  }, [router]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    window.location.href = '/';
+    router.push('/');
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="w-10 h-10 text-emerald-600 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* SIDEBAR */}
-      <aside className="w-64 bg-emerald-950 text-white flex flex-col shadow-xl hidden md:flex">
-        <div className="p-6 border-b border-emerald-900/50">
-          <h1 className="text-2xl font-black font-serif tracking-wide text-emerald-50">CivilPrep</h1>
-          <p className="text-emerald-400 text-xs font-bold uppercase tracking-wider mt-1">Admin Portal</p>
-        </div>
+    <div className="min-h-screen flex flex-col md:flex-row w-full bg-gray-50/50">
+
+      {/* SIDEBAR NAVIGATION */}
+      <aside className="w-full md:w-72 bg-white/40 backdrop-blur-xl border-b md:border-b-0 md:border-r border-gray-200 p-4 md:p-6 flex flex-col shrink-0">
         
-        <nav className="flex-1 p-4 space-y-2">
-          <button className="w-full flex items-center gap-3 px-4 py-3 bg-emerald-900/50 text-emerald-100 rounded-xl font-medium transition-colors">
-            <LayoutDashboard className="w-5 h-5" /> Dashboard
+        {/* Header - Stays left on mobile, block on desktop */}
+        <div className="mb-4 md:mb-10 flex justify-between items-center md:block animate-fade-in">
+          <div>
+            <h1 className="text-xl md:text-2xl font-black text-emerald-950 font-serif tracking-tight">Admin Panel</h1>
+            <p className="text-[10px] md:text-xs font-bold text-gray-500 tracking-widest uppercase mt-1">Gyankunj Academy</p>
+          </div>
+          
+          {/* Mobile Logout Button (Hidden on Desktop) */}
+          <button 
+            onClick={handleLogout}
+            className="md:hidden p-2 text-rose-600 bg-rose-50 rounded-lg hover:bg-rose-100"
+            aria-label="Logout"
+          >
+            <LogOut className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Navigation - Horizontal scroll on mobile, Vertical stack on desktop */}
+        <nav 
+          className="flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] animate-fade-in" 
+          style={{ animationDelay: '100ms' }}
+        >
+          {ADMIN_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex-shrink-0 md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl md:rounded-2xl font-bold transition-all duration-300 text-sm md:text-base ${
+                  isActive
+                    ? 'bg-emerald-800 text-white shadow-md shadow-emerald-900/20'
+                    : 'text-gray-500 hover:bg-white/60 hover:text-emerald-700'
+                }`}
+              >
+                <Icon className={`w-4 h-4 md:w-5 md:h-5 ${isActive ? 'text-emerald-300' : ''}`} />
+                <span className="whitespace-nowrap">{tab.label}</span>
+              </button>
+            );
+          })}
         </nav>
 
-        <div className="p-4 border-t border-emerald-900/50">
-          <div className="text-xs text-emerald-400 mb-3 px-2 truncate">
-            Logged in as:<br/>
-            <span className="text-white font-semibold">{adminEmail}</span>
-          </div>
-          <button 
-            onClick={handleLogout} 
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg font-medium transition-colors"
+        {/* Desktop Logout Button (Hidden on Mobile) */}
+        <div className="hidden md:block mt-auto pt-6 border-t border-gray-200 animate-fade-in" style={{ animationDelay: '200ms' }}>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 transition-colors"
           >
-            <LogOut className="w-4 h-4" /> Sign Out
+            <LogOut className="w-5 h-5" /> Sign Out
           </button>
         </div>
       </aside>
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto animate-fade-in">
-        <header className="flex justify-between items-center mb-8">
-          <div>
-            <h2 className="text-3xl font-bold text-gray-900 font-serif">Admin Overview</h2>
-            <p className="text-gray-500 mt-1">Manage content and monitor student performance.</p>
-          </div>
-        </header>
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 w-full p-4 md:p-8 overflow-x-hidden">
+        
+        {/* Limit max width on large screens to keep content readable */}
+        <div className="max-w-7xl mx-auto w-full">
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
-          <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle2 className="w-8 h-8 text-emerald-600" />
-          </div>
-          <h3 className="text-xl font-bold text-gray-900 mb-2">Admin Panel Restored!</h3>
-          <p className="text-gray-500 max-w-md mx-auto">
-            The infinite loop has been fixed. You can now safely access your admin tools.
-          </p>
+          {/* OVERVIEW TAB */}
+          {activeTab === 'overview' && <AdminOverview />}
+
+          {/* QUIZZES TAB */}
+          {activeTab === 'quizzes' && <QuizManager />}
+
+          {/* AI GENERATE TAB */}
+          {activeTab === 'aigen' && <AiQuizBuilder />}
+
+          {/* RESOURCES TAB */}
+          {activeTab === 'resources' && <ResourceManager />}
+
+          {/* STUDENTS TAB */}
+          {activeTab === 'students' && <StudentsManager />}
+
+          {/* PAYMENTS TAB */}
+          {activeTab === 'payments' && <PaymentsManager />}
+
+          {/* CSV IMPORT TAB */}
+          {activeTab === 'csvimport' && <CsvImporter />}
+
+          {/* SCHEDULED TAB */}
+          {activeTab === 'scheduled' && (
+            <div className="bg-white/50 backdrop-blur-sm p-8 md:p-12 text-center flex flex-col items-center justify-center border-dashed border-2 border-emerald-900/20 rounded-2xl md:rounded-[2rem] w-full mt-4">
+              <CalendarClock className="w-12 h-12 md:w-16 md:h-16 text-emerald-400 mb-4" />
+              <h3 className="text-xl md:text-2xl font-bold text-emerald-950 mb-2 font-serif">Live Events Module</h3>
+              <p className="text-xs md:text-sm text-gray-500 mb-6 max-w-md">
+                This module will handle the logic for setting up live, time-gated "All India Mock Tests".
+              </p>
+            </div>
+          )}
+
         </div>
       </main>
     </div>
