@@ -1,46 +1,79 @@
 'use client';
+// Force Next.js to bypass static prerendering for this route
+export const dynamic = 'force-dynamic'; 
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { useRouter } from 'next/navigation';
+// We removed useRouter completely to fix the infinite spinning bug!
 import { Loader2, GraduationCap, ShieldCheck } from 'lucide-react';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
-    // We pass the whole session now to check the email
+    let mounted = true;
+
     const checkUserRoleAndRedirect = async (session: any) => {
-      // SUPER ADMIN OVERRIDE
+      // 1. SAFEGUARD: Ensure session and user exist before accessing properties
+      if (!session?.user?.email) {
+        if (mounted) setCheckingAuth(false);
+        return;
+      }
+
+      // SUPER ADMIN OVERRIDE - Using window.location.href for guaranteed redirects
       if (session.user.email === 'kshitiz2007@gmail.com' || session.user.email === 'admin@civilprep.in') {
-        router.push('/admin');
+        window.location.href = '/admin';
         return;
       }
 
       // Normal database check for everyone else
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
 
-      if (data?.role === 'admin') {
-        router.push('/admin');
-      } else {
-        router.push('/dashboard');
+        if (error) {
+          console.error('Error fetching profile:', error.message);
+          window.location.href = '/dashboard'; // Fallback hard redirect
+          return;
+        }
+
+        if (mounted) {
+          if (data?.role === 'admin') {
+            window.location.href = '/admin'; // Hard redirect to admin
+          } else {
+            window.location.href = '/dashboard'; // Hard redirect to dashboard
+          }
+        }
+      } catch (err) {
+        console.error('Unexpected error checking role:', err);
+        window.location.href = '/dashboard';
       }
     };
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        checkUserRoleAndRedirect(session);
-      } else {
-        setCheckingAuth(false);
-      }
-    });
+    // 2. SAFEGUARD: Handle the initial session fetch inside a robust async function
+    const initSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
 
+        if (session) {
+          await checkUserRoleAndRedirect(session);
+        } else {
+          if (mounted) setCheckingAuth(false);
+        }
+      } catch (error) {
+        console.error('Session initialization error:', error);
+        if (mounted) setCheckingAuth(false);
+      }
+    };
+
+    initSession();
+
+    // 3. SAFEGUARD: Catch auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
         checkUserRoleAndRedirect(session);
@@ -48,20 +81,25 @@ export default function LoginPage() {
     });
 
     return () => {
-      authListener.subscription.unsubscribe();
+      mounted = false;
+      // 4. SAFEGUARD: Optional chaining to prevent crashes on unmount
+      authListener?.subscription?.unsubscribe();
     };
-  }, [router]);
+  }, []); // <-- Empty dependency array prevents infinite loops!
 
   const handleGoogleLogin = async () => {
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin
-      }
-    });
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          // 5. SAFEGUARD: Ensure window is defined
+          redirectTo: typeof window !== 'undefined' ? window.location.origin : '',
+        }
+      });
 
-    if (error) {
+      if (error) throw error;
+    } catch (error: any) {
       alert("Error logging in: " + error.message);
       setLoading(false);
     }
