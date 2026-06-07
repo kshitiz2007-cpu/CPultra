@@ -1,13 +1,13 @@
 'use client';
 // Force Next.js to bypass static prerendering for this route
 export const dynamic = 'force-dynamic'; 
+
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { useRouter } from 'next/navigation';
+// We removed useRouter completely to fix the infinite spinning bug!
 import { Loader2, GraduationCap, ShieldCheck } from 'lucide-react';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
@@ -21,9 +21,9 @@ export default function LoginPage() {
         return;
       }
 
-      // SUPER ADMIN OVERRIDE
+      // SUPER ADMIN OVERRIDE - Using window.location.href for guaranteed redirects
       if (session.user.email === 'kshitiz2007@gmail.com' || session.user.email === 'admin@civilprep.in') {
-        if (mounted) router.push('/admin');
+        window.location.href = '/admin';
         return;
       }
 
@@ -37,20 +37,20 @@ export default function LoginPage() {
 
         if (error) {
           console.error('Error fetching profile:', error.message);
-          if (mounted) router.push('/dashboard'); // Fallback redirect
+          window.location.href = '/dashboard'; // Fallback hard redirect
           return;
         }
 
         if (mounted) {
           if (data?.role === 'admin') {
-            router.push('/admin');
+            window.location.href = '/admin'; // Hard redirect to admin
           } else {
-            router.push('/dashboard');
+            window.location.href = '/dashboard'; // Hard redirect to dashboard
           }
         }
       } catch (err) {
         console.error('Unexpected error checking role:', err);
-        if (mounted) router.push('/dashboard');
+        window.location.href = '/dashboard';
       }
     };
 
@@ -85,7 +85,7 @@ export default function LoginPage() {
       // 4. SAFEGUARD: Optional chaining to prevent crashes on unmount
       authListener?.subscription?.unsubscribe();
     };
-  }, [router]);
+  }, []); // <-- Empty dependency array prevents infinite loops!
 
   const handleGoogleLogin = async () => {
     try {
