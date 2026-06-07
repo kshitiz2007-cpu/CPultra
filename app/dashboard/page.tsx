@@ -15,7 +15,8 @@ import {
   Target, 
   ChevronRight, 
   CheckCircle2, 
-  PlayCircle
+  PlayCircle,
+  Clock // <-- Here is the missing icon that caused the crash!
 } from 'lucide-react';
 
 // Sidebar Tabs
@@ -327,7 +328,6 @@ export default function StudentDashboardPage() {
                     <p className="text-sm mt-2">Take a quiz to start building your history.</p>
                   </div>
                 ) : (
-                  // Uses the same attempts we fetched for the overview, but we show all of them here (or at least the fetched list)
                   recentAttempts.map((attempt) => (
                     <div key={attempt.id} className="p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-gray-50 transition-colors">
                       <div>
