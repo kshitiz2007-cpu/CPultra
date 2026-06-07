@@ -38,7 +38,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
 
   // Authenticate and Verify Admin Privileges
- useEffect(() => {
+  useEffect(() => {
     async function checkAdmin() {
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -80,25 +80,9 @@ export default function AdminPage() {
     checkAdmin();
   }, []); // <-- This empty array is crucial to prevent the infinite loop!
 
-      // Normal database check for everyone else
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
-
-      if (profile?.role !== 'admin') {
-        router.push('/dashboard');
-      } else {
-        setLoading(false);
-      }
-    }
-    checkAdmin();
-  }, [router]);
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push('/');
+    window.location.href = '/';
   };
 
   if (loading) {
