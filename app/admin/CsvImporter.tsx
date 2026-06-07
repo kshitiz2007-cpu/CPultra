@@ -113,7 +113,7 @@ export default function CsvImporter() {
       time_limit: timeLimit,
       is_paid: false,
       price: 0,
-      active: false, // Save as draft
+      active: true, // Save as draft
       questions: parsedQuestions.map((q, i) => ({ id: `csv_${Date.now()}_${i}`, ...q }))
     };
 

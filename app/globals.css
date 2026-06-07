@@ -1,5 +1,9 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
 
+body {
+  font-family: 'Inter', sans-serif;
+}
 /* A modern, subtle moving gradient background suitable for education platforms */
 body {
   background: linear-gradient(-45deg, #fcfbf9, #edf5f0, #fdf0ef, #fef9ec);
