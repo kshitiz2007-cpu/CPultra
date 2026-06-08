@@ -384,46 +384,6 @@ useEffect(() => {
             ]}
           />
 
-         <LeaderboardHero
-  userRank={currentUser?.rank || 0}
-  averageScore={currentUser?.averageScore || 0}
-  totalTests={currentUser?.testsTaken || 0}
-  percentile={currentUser?.percentile || 0}
-/>
-
-<TopThree
-  first={
-    leaderboardData[0]
-      ? {
-          id: leaderboardData[0].id,
-          name: leaderboardData[0].name,
-          score: leaderboardData[0].averageScore,
-          testsTaken: leaderboardData[0].testsTaken,
-        }
-      : undefined
-  }
-  second={
-    leaderboardData[1]
-      ? {
-          id: leaderboardData[1].id,
-          name: leaderboardData[1].name,
-          score: leaderboardData[1].averageScore,
-          testsTaken: leaderboardData[1].testsTaken,
-        }
-      : undefined
-  }
-  third={
-    leaderboardData[2]
-      ? {
-          id: leaderboardData[2].id,
-          name: leaderboardData[2].name,
-          score: leaderboardData[2].averageScore,
-          testsTaken: leaderboardData[2].testsTaken,
-        }
-      : undefined
-  }
-/>
-
           {/* Mobile Logout Row */}
           <div className="flex md:hidden justify-start pt-4">
             <button onClick={handleLogout} className="w-fit p-3 bg-white/10 text-rose-300 backdrop-blur-md rounded-2xl shadow-lg flex items-center gap-2 border border-white/10 font-bold">
