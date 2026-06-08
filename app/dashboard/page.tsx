@@ -17,8 +17,6 @@ import QuickActions from '@/components/dashboard/QuickActions';
 import ContinueLearning from '@/components/dashboard/ContinueLearning';
 import PerformanceAnalytics from '@/components/dashboard/PerformanceAnalytics';
 import AchievementPanel from '@/components/dashboard/AchievementPanel';
-import LeaderboardHero from '@/components/leaderboard/LeaderboardHero';
-import TopThree from '@/components/leaderboard/TopThree';
 import StudentChatWidget from '@/components/StudentChatWidget';
 
 export default function DashboardPage() {
