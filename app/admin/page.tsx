@@ -7,12 +7,14 @@ import { useRouter } from 'next/navigation';
 
 // All your custom Admin Modules!
 import AdminOverview from './AdminOverview';
+import AdminInbox from './AdminInbox';
 import AiQuizBuilder from './AiQuizBuilder';
 import ResourceManager from './ResourceManager';
 import CsvImporter from './CsvImporter';
 import PaymentsManager from './PaymentsManager';
 import StudentsManager from './StudentsManager';
 import QuizManager from './QuizManager';
+
 
 import {
   LayoutDashboard, FileQuestion, Users, FileText,
