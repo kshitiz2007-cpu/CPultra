@@ -1,284 +1,255 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import {
-  FileText, Loader2, Link as LinkIcon, Download, PlusCircle, Trash2, 
-  UploadCloud, Image as ImageIcon, Save, CheckCircle
-} from 'lucide-react';
+import { FileText, Plus, Trash2, FolderOpen, Save, Loader2, Link as LinkIcon } from 'lucide-react';
 
-interface Resource {
-  id: string;
-  title: string;
-  file_type: string;
-  file_url: string;
-  category: string;
-  section: string;
-  created_at: string;
-}
-
-const CATEGORIES = [
-  'History', 'Geography', 'Polity', 'Economy',
-  'Science & Tech', 'Environment', 'Current Affairs',
-  'Maths', 'Reasoning', 'GS'
+const SUBJECTS = [
+  'History', 'Geography', 'Polity', 'Economy', 
+  'Science & Tech', 'Environment', 'Current Affairs', 
+  'Maths', 'Reasoning'
 ];
 
 export default function ResourceManager() {
-  const [resources, setResources] = useState<Resource[]>([]);
+  const [resources, setResources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
-  const [successId, setSuccessId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // States for adding
-  const [newTitle, setNewTitle] = useState('');
-  const [newType, setNewType] = useState('upload');
-  const [newUrl, setNewUrl] = useState('');
-  const [newFile, setNewFile] = useState<File | null>(null);
-  const [newCategory, setNewCategory] = useState('History');
-  const [newSection, setNewSection] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // State to track text inputs for subsections
-  const [editSections, setEditSections] = useState<Record<string, string>>({});
+  // FORM STATE (Fixed the default state to match the first dropdown option!)
+  const [title, setTitle] = useState('');
+  const [fileType, setFileType] = useState('pdf');
+  const [fileUrl, setFileUrl] = useState('');
+  const [category, setCategory] = useState('History');
+  const [section, setSection] = useState('');
 
   useEffect(() => {
     fetchResources();
   }, []);
 
-  const fetchResources = async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from('resources')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (data) {
-      setResources(data);
-      // Initialize the subsection inputs with current database values
-      const sectionsMap: Record<string, string> = {};
-      data.forEach(r => sectionsMap[r.id] = r.section || '');
-      setEditSections(sectionsMap);
+  async function fetchResources() {
+    try {
+      const { data, error } = await supabase
+        .from('resources')
+        .select('*')
+        .order('created_at', { ascending: false });
+        
+      if (error) throw error;
+      if (data) setResources(data);
+    } catch (error) {
+      console.error("Error fetching resources:", error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
+  }
 
-  // --- ADD NEW RESOURCE ---
-  const handleAddResource = async () => {
-    if (!newTitle) return alert('Please provide a title.');
-    if (newType !== 'upload' && !newUrl) return alert('Please provide a valid URL.');
-    if (newType === 'upload' && !newFile) return alert('Please select a file to upload.');
+  async function handleAddResource(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title || !fileUrl) return alert("Title and File URL are required.");
     
-    setIsAdding(true);
-    let finalUrl = newUrl;
-    let finalType = newType;
+    setSaving(true);
+    try {
+      const newResource = {
+        id: `res_${Date.now()}`,
+        title,
+        file_type: fileType,
+        file_url: fileUrl,
+        category,
+        section: section || category, // Default to category if no subsection
+      };
 
-    if (newType === 'upload' && newFile) {
-      const fileExt = newFile.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `uploads/${fileName}`;
+      const { error } = await supabase.from('resources').insert([newResource]);
+      if (error) throw error;
 
-      const { error: uploadError } = await supabase.storage.from('study-materials').upload(filePath, newFile);
-      if (uploadError) {
-        setIsAdding(false);
-        return alert('Storage Error: ' + uploadError.message);
-      }
-
-      const { data: publicUrlData } = supabase.storage.from('study-materials').getPublicUrl(filePath);
-      finalUrl = publicUrlData.publicUrl;
-      finalType = newFile.type.startsWith('image/') ? 'image' : 'pdf';
+      alert("Resource added successfully!");
+      setTitle('');
+      setFileUrl('');
+      setSection('');
+      fetchResources(); // Refresh list
+    } catch (error: any) {
+      alert("Error adding resource: " + error.message);
+    } finally {
+      setSaving(false);
     }
+  }
 
-    const { data, error } = await supabase.from('resources').insert([{
-      title: newTitle, file_type: finalType, file_url: finalUrl,
-      category: newCategory, section: newSection || newCategory
-    }]).select();
-
-    if (error) alert('DB Error: ' + error.message);
-    else if (data) {
-      setResources([data[0], ...resources]);
-      setEditSections({...editSections, [data[0].id]: data[0].section});
-      setNewTitle(''); setNewUrl(''); setNewFile(null); setNewSection('');
-      if (fileInputRef.current) fileInputRef.current.value = '';
+  async function handleDelete(id: string) {
+    if (!confirm("Are you sure you want to delete this resource?")) return;
+    
+    try {
+      const { error } = await supabase.from('resources').delete().eq('id', id);
+      if (error) throw error;
+      setResources(resources.filter(r => r.id !== id));
+    } catch (error: any) {
+      alert("Error deleting resource: " + error.message);
     }
-    setIsAdding(false);
-  };
+  }
 
-  // --- UPDATE EXISTING RESOURCE CATEGORY ---
-  const handleUpdateCategory = async (id: string, newCat: string) => {
-    setActionLoadingId(id);
-    const { error } = await supabase.from('resources').update({ category: newCat }).eq('id', id);
-    if (!error) {
-      setResources(resources.map(r => r.id === id ? { ...r, category: newCat } : r));
-      showSuccess(id);
-    } else {
-      alert("Failed to update category.");
+  async function handleUpdateCategory(id: string, newCategory: string, newSection: string) {
+    try {
+      const { error } = await supabase
+        .from('resources')
+        .update({ category: newCategory, section: newSection || newCategory })
+        .eq('id', id);
+        
+      if (error) throw error;
+      alert("Resource updated!");
+      fetchResources();
+    } catch (error: any) {
+      alert("Error updating: " + error.message);
     }
-    setActionLoadingId(null);
-  };
+  }
 
-  // --- UPDATE EXISTING RESOURCE SUBSECTION ---
-  const handleUpdateSection = async (id: string) => {
-    setActionLoadingId(id);
-    const newSec = editSections[id];
-    const { error } = await supabase.from('resources').update({ section: newSec }).eq('id', id);
-    if (!error) {
-      setResources(resources.map(r => r.id === id ? { ...r, section: newSec } : r));
-      showSuccess(id);
-    } else {
-      alert("Failed to update subsection.");
-    }
-    setActionLoadingId(null);
-  };
-
-  // --- DELETE RESOURCE ---
-  const deleteResource = async (resourceId: string) => {
-    if (!confirm('Are you sure you want to delete this file forever?')) return;
-    setActionLoadingId(resourceId);
-    await supabase.from('resources').delete().eq('id', resourceId);
-    setResources(resources.filter(r => r.id !== resourceId));
-    setActionLoadingId(null);
-  };
-
-  const showSuccess = (id: string) => {
-    setSuccessId(id);
-    setTimeout(() => setSuccessId(null), 2000);
-  };
-
-  const getResourceIcon = (type: string) => {
-    if (type === 'image') return <ImageIcon className="w-4 h-4 text-purple-500" />;
-    if (type === 'pdf') return <Download className="w-4 h-4 text-rose-500" />;
-    return <LinkIcon className="w-4 h-4 text-blue-500" />;
-  };
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-emerald-400">
+        <Loader2 className="w-10 h-10 animate-spin mb-4" />
+        <p className="font-medium text-white/70">Loading database...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-8 animate-fade-in w-full pb-20">
+    <div className="animate-fade-in space-y-8 text-white">
       
-      {/* 1. UPLOAD SECTION */}
-      <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] p-5 md:p-8 border border-white/60 shadow-sm">
-        <h3 className="font-black text-emerald-950 mb-6 flex items-center gap-2 text-xl">
-          <PlusCircle className="w-6 h-6 text-emerald-600" /> Upload New File
-        </h3>
+      {/* 1. UPLOAD NEW FILE CARD (Glassmorphism) */}
+      <div className="bg-white/5 backdrop-blur-2xl rounded-[2rem] p-6 md:p-8 border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] relative overflow-hidden">
+        <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl -z-10"></div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-          <div className="lg:col-span-1">
-            <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Type</label>
-            <select className="w-full p-3 rounded-xl bg-white border border-gray-200" value={newType} onChange={e => {setNewType(e.target.value); setNewFile(null);}}>
-              <option value="upload">Upload PDF/Image</option>
-              <option value="link">Web Link</option>
+        <h2 className="text-xl md:text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-500/30">
+            <Plus className="w-5 h-5 text-emerald-400" />
+          </div>
+          Upload New File
+        </h2>
+
+        <form onSubmit={handleAddResource} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+          
+          <div className="md:col-span-1">
+            <label className="block text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2 ml-1">Type</label>
+            <select 
+              value={fileType} onChange={(e) => setFileType(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none"
+            >
+              <option value="pdf" className="bg-gray-900">PDF Document</option>
+              <option value="link" className="bg-gray-900">Web Link</option>
             </select>
           </div>
-          <div className="lg:col-span-1">
-            <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Title</label>
-            <input type="text" placeholder="e.g. Current Affairs" className="w-full p-3 rounded-xl bg-white border border-gray-200" value={newTitle} onChange={e => setNewTitle(e.target.value)} />
+
+          <div className="md:col-span-1">
+            <label className="block text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2 ml-1">Title</label>
+            <input 
+              type="text" required placeholder="e.g. Modern History Notes"
+              value={title} onChange={(e) => setTitle(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 text-white placeholder-white/30 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+            />
           </div>
-          <div className="lg:col-span-1">
-            <label className="text-xs font-bold text-gray-500 uppercase block mb-2">File / URL</label>
-            {newType === 'upload' ? (
-             <input type="file" ref={fileInputRef} onChange={(e) => setNewFile(e.target.files?.[0] || null)} className="w-full p-2 bg-white rounded-xl border border-gray-200 text-sm" />
-            ) : (
-             <input type="text" placeholder="https://..." className="w-full p-3 rounded-xl bg-white border border-gray-200" value={newUrl} onChange={e => setNewUrl(e.target.value)} />
-            )}
+
+          <div className="md:col-span-1">
+            <label className="block text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2 ml-1">File URL</label>
+            <input 
+              type="url" required placeholder="https://..."
+              value={fileUrl} onChange={(e) => setFileUrl(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 text-white placeholder-white/30 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+            />
           </div>
-          <div className="lg:col-span-1">
-            <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Subject</label>
-            <select className="w-full p-3 rounded-xl bg-white border border-gray-200" value={newCategory} onChange={e => setNewCategory(e.target.value)}>
-              {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+
+          <div className="md:col-span-1">
+            <label className="block text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2 ml-1">Subject</label>
+            <select 
+              value={category} onChange={(e) => setCategory(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none"
+            >
+              {SUBJECTS.map(sub => <option key={sub} value={sub} className="bg-gray-900">{sub}</option>)}
             </select>
           </div>
-          <div className="lg:col-span-1">
-            <button onClick={handleAddResource} disabled={isAdding} className="w-full bg-emerald-950 text-white font-bold py-3 px-4 rounded-xl flex justify-center hover:bg-emerald-800 transition-colors">
-              {isAdding ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Save File'}
+
+          <div className="md:col-span-1">
+            <button 
+              type="submit" disabled={saving}
+              className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+              Save File
             </button>
           </div>
-        </div>
+        </form>
       </div>
 
-      {/* 2. ORGANIZE SECTION (THE FIX FOR OLD FILES) */}
-      <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-white/60 bg-white/30">
-           <h3 className="font-black text-emerald-950 flex items-center gap-2 text-xl">
-             <FileText className="w-6 h-6 text-blue-600" /> Organize Database
-           </h3>
-           <p className="text-sm text-gray-600 mt-1 font-medium">Reassign older files to new folders or group them by subsections.</p>
+      {/* 2. ORGANIZE DATABASE CARD (Glassmorphism) */}
+      <div className="bg-white/5 backdrop-blur-2xl rounded-[2rem] border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] overflow-hidden">
+        <div className="p-6 md:p-8 border-b border-white/10 bg-white/5">
+          <h2 className="text-xl md:text-2xl font-bold text-white mb-2 flex items-center gap-3">
+            <div className="p-2 bg-blue-500/20 rounded-xl border border-blue-500/30">
+              <FolderOpen className="w-5 h-5 text-blue-400" />
+            </div>
+            Organize Database
+          </h2>
+          <p className="text-sm text-white/50 ml-1">Reassign older files to new folders or delete outdated material.</p>
         </div>
-        
-        <div className="overflow-x-auto">
-          {loading ? (
-             <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
+
+        <div className="divide-y divide-white/10 max-h-[600px] overflow-y-auto custom-scrollbar">
+          {resources.length === 0 ? (
+            <div className="p-12 text-center text-white/50">
+              <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p>No resources found in the database.</p>
+            </div>
           ) : (
-            <table className="w-full text-left min-w-[800px]">
-              <thead className="bg-gray-50/80 text-xs uppercase text-gray-500 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-4">File Name</th>
-                  <th className="px-6 py-4">Subject Folder (Move)</th>
-                  <th className="px-6 py-4">Subsection (Group)</th>
-                  <th className="px-6 py-4 text-center">Delete</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 bg-white/20">
-                {resources.map((r) => (
-                  <tr key={r.id} className="hover:bg-white/60 transition-colors">
-                    
-                    {/* Title & Link */}
-                    <td className="px-6 py-4">
-                      <div className="font-bold flex items-center gap-2 text-gray-900">
-                         {getResourceIcon(r.file_type || '')}
-                         <a href={r.file_url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 line-clamp-1">{r.title}</a>
-                      </div>
-                      <div className="text-[10px] text-gray-400 mt-1 uppercase tracking-widest">{r.file_type || 'LINK'}</div>
-                    </td>
+            resources.map((res) => (
+              <div key={res.id} className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-white/5 transition-colors group">
+                
+                {/* Info */}
+                <div className="flex items-center gap-4 flex-1 overflow-hidden w-full">
+                  <div className={`p-3 rounded-xl shrink-0 border shadow-inner ${
+                    res.file_type === 'pdf' ? 'bg-rose-500/20 border-rose-500/30 text-rose-400' : 'bg-indigo-500/20 border-indigo-500/30 text-indigo-400'
+                  }`}>
+                    {res.file_type === 'pdf' ? <FileText className="w-5 h-5" /> : <LinkIcon className="w-5 h-5" />}
+                  </div>
+                  <div className="overflow-hidden">
+                    <h3 className="font-bold text-white truncate text-base">{res.title}</h3>
+                    <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1 font-bold">
+                      {(res.file_type || 'LINK').toUpperCase()} • {new Date(res.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
 
-                    {/* Category Dropdown (Auto-Saves) */}
-                    <td className="px-6 py-4">
-                      <select 
-                        className={`p-2 rounded-xl text-sm font-bold border transition-colors outline-none cursor-pointer ${successId === r.id ? 'bg-green-50 border-green-300 text-green-700' : 'bg-white border-gray-200 text-gray-700'}`}
-                        value={r.category || ''}
-                        onChange={(e) => handleUpdateCategory(r.id, e.target.value)}
-                        disabled={actionLoadingId === r.id}
-                      >
-                        {!CATEGORIES.includes(r.category) && <option value={r.category}>{r.category} (Old)</option>}
-                        {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                      </select>
-                    </td>
+                {/* Controls */}
+                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                  <select 
+                    value={res.category || 'History'}
+                    onChange={(e) => handleUpdateCategory(res.id, e.target.value, res.section)}
+                    className="bg-white/5 border border-white/10 text-white/80 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 appearance-none flex-1 md:flex-none md:w-40"
+                  >
+                    {SUBJECTS.map(sub => <option key={sub} value={sub} className="bg-gray-900">{sub}</option>)}
+                  </select>
 
-                    {/* Subsection Input (Manual Save) */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="text"
-                          placeholder="e.g. Ancient History"
-                          value={editSections[r.id] !== undefined ? editSections[r.id] : ''}
-                          onChange={(e) => setEditSections({...editSections, [r.id]: e.target.value})}
-                          className="w-40 p-2 rounded-xl text-sm bg-white border border-gray-200 outline-none focus:border-blue-400"
-                        />
-                        {/* Only show SAVE button if they typed something different from the database */}
-                        {editSections[r.id] !== (r.section || '') && (
-                          <button 
-                            onClick={() => handleUpdateSection(r.id)}
-                            className="p-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
-                          >
-                            <Save className="w-3.5 h-3.5" /> Save
-                          </button>
-                        )}
-                        {successId === r.id && <CheckCircle className="w-5 h-5 text-green-500" />}
-                      </div>
-                    </td>
+                  <input 
+                    type="text"
+                    value={res.section || ''}
+                    placeholder="Subsection..."
+                    onBlur={(e) => handleUpdateCategory(res.id, res.category, e.target.value)}
+                    onChange={(e) => {
+                      // Optimistic UI update locally so they can type
+                      const updated = resources.map(r => r.id === res.id ? {...r, section: e.target.value} : r);
+                      setResources(updated);
+                    }}
+                    className="bg-white/5 border border-white/10 text-white placeholder-white/30 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 flex-1 md:flex-none md:w-40"
+                  />
 
-                    {/* Delete Action */}
-                    <td className="px-6 py-4 text-center">
-                      <button onClick={() => deleteResource(r.id)} disabled={actionLoadingId === r.id} className="p-2 bg-white rounded-xl border border-gray-200 text-rose-500 hover:bg-rose-50 hover:border-rose-200 transition-colors shadow-sm">
-                        {actionLoadingId === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                      </button>
-                    </td>
+                  <button 
+                    onClick={() => handleDelete(res.id)}
+                    className="p-2.5 bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-400 rounded-lg transition-colors border border-rose-500/20 shrink-0"
+                    title="Delete Resource"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
 
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              </div>
+            ))
           )}
         </div>
       </div>
+
     </div>
   );
 }
