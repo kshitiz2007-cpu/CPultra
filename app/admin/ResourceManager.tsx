@@ -1,253 +1,294 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { FileText, Plus, Trash2, FolderOpen, Save, Loader2, Link as LinkIcon } from 'lucide-react';
+import {
+  FileText,
+  Plus,
+  Trash2,
+  FolderOpen,
+  Save,
+  Loader2,
+  Link as LinkIcon,
+  Search,
+  BarChart3,
+  BookOpen,
+  Globe
+} from 'lucide-react';
 
 const SUBJECTS = [
-  'History', 'Geography', 'Polity', 'Economy', 
-  'Science & Tech', 'Environment', 'Current Affairs', 
-  'Maths', 'Reasoning'
+  'History','Geography','Polity','Economy',
+  'Science & Tech','Environment','Current Affairs',
+  'Maths','Reasoning'
 ];
 
 export default function ResourceManager() {
-  const [resources, setResources] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [resources,setResources] = useState<any[]>([]);
+  const [loading,setLoading] = useState(true);
+  const [saving,setSaving] = useState(false);
 
-  // FORM STATE (Fixed the default state to match the first dropdown option!)
-  const [title, setTitle] = useState('');
-  const [fileType, setFileType] = useState('pdf');
-  const [fileUrl, setFileUrl] = useState('');
-  const [category, setCategory] = useState('History');
-  const [section, setSection] = useState('');
+  const [search,setSearch] = useState('');
+  const [filter,setFilter] = useState('All');
+
+  const [title,setTitle] = useState('');
+  const [fileType,setFileType] = useState('pdf');
+  const [fileUrl,setFileUrl] = useState('');
+  const [category,setCategory] = useState('History');
+  const [section,setSection] = useState('');
 
   useEffect(() => {
     fetchResources();
   }, []);
 
   async function fetchResources() {
-    try {
-      const { data, error } = await supabase
-        .from('resources')
-        .select('*')
-        .order('created_at', { ascending: false });
-        
-      if (error) throw error;
-      if (data) setResources(data);
-    } catch (error) {
-      console.error("Error fetching resources:", error);
-    } finally {
-      setLoading(false);
-    }
+    const { data } = await supabase
+      .from('resources')
+      .select('*')
+      .order('created_at',{ascending:false});
+
+    setResources(data || []);
+    setLoading(false);
   }
 
-  async function handleAddResource(e: React.FormEvent) {
+  async function handleAddResource(e:any) {
     e.preventDefault();
-    if (!title || !fileUrl) return alert("Title and File URL are required.");
-    
+
     setSaving(true);
-    try {
-      const newResource = {
-        id: `res_${Date.now()}`,
-        title,
-        file_type: fileType,
-        file_url: fileUrl,
-        category,
-        section: section || category, // Default to category if no subsection
-      };
 
-      const { error } = await supabase.from('resources').insert([newResource]);
-      if (error) throw error;
+    const { error } = await supabase.from('resources').insert([{
+      id:`res_${Date.now()}`,
+      title,
+      file_type:fileType,
+      file_url:fileUrl,
+      category,
+      section:section || category
+    }]);
 
-      alert("Resource added successfully!");
-      setTitle('');
-      setFileUrl('');
-      setSection('');
-      fetchResources(); // Refresh list
-    } catch (error: any) {
-      alert("Error adding resource: " + error.message);
-    } finally {
-      setSaving(false);
+    setSaving(false);
+
+    if(error){
+      alert(error.message);
+      return;
     }
+
+    setTitle('');
+    setFileUrl('');
+    setSection('');
+
+    fetchResources();
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Are you sure you want to delete this resource?")) return;
-    
-    try {
-      const { error } = await supabase.from('resources').delete().eq('id', id);
-      if (error) throw error;
-      setResources(resources.filter(r => r.id !== id));
-    } catch (error: any) {
-      alert("Error deleting resource: " + error.message);
-    }
+  async function handleDelete(id:string){
+    if(!confirm('Delete resource?')) return;
+
+    await supabase
+      .from('resources')
+      .delete()
+      .eq('id',id);
+
+    setResources(resources.filter(r=>r.id!==id));
   }
 
-  async function handleUpdateCategory(id: string, newCategory: string, newSection: string) {
-    try {
-      const { error } = await supabase
-        .from('resources')
-        .update({ category: newCategory, section: newSection || newCategory })
-        .eq('id', id);
-        
-      if (error) throw error;
-      alert("Resource updated!");
-      fetchResources();
-    } catch (error: any) {
-      alert("Error updating: " + error.message);
-    }
-  }
+  const filteredResources = useMemo(()=>{
+    return resources.filter(r=>{
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-emerald-400">
-        <Loader2 className="w-10 h-10 animate-spin mb-4" />
-        <p className="font-medium text-white/70">Loading database...</p>
-      </div>
-    );
-  }
+      const matchesSearch =
+        r.title?.toLowerCase().includes(search.toLowerCase());
+
+      const matchesFilter =
+        filter === 'All' || r.category === filter;
+
+      return matchesSearch && matchesFilter;
+    });
+  },[resources,search,filter]);
+
+  const pdfCount =
+    resources.filter(r=>r.file_type==='pdf').length;
+
+  const linkCount =
+    resources.filter(r=>r.file_type==='link').length;
 
   return (
-    <div className="animate-fade-in space-y-8 text-white">
-      
-      {/* 1. UPLOAD NEW FILE CARD (Glassmorphism) */}
-      <div className="bg-white/5 backdrop-blur-2xl rounded-[2rem] p-6 md:p-8 border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] relative overflow-hidden">
-        <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl -z-10"></div>
-        
-        <h2 className="text-xl md:text-2xl font-bold text-white mb-6 flex items-center gap-3">
-          <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-500/30">
-            <Plus className="w-5 h-5 text-emerald-400" />
-          </div>
-          Upload New File
+    <div className="space-y-8 text-white">
+
+      <div>
+        <h1 className="text-4xl font-black">
+          Resource Center
+        </h1>
+
+        <p className="text-white/60 mt-2">
+          Manage PDFs, notes and study material.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+
+        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
+          <FolderOpen className="w-6 h-6 text-emerald-400 mb-3" />
+          <div className="text-4xl font-black">{resources.length}</div>
+          <div className="text-white/50 mt-2">Total Resources</div>
+        </div>
+
+        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
+          <FileText className="w-6 h-6 text-rose-400 mb-3" />
+          <div className="text-4xl font-black">{pdfCount}</div>
+          <div className="text-white/50 mt-2">PDF Files</div>
+        </div>
+
+        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
+          <Globe className="w-6 h-6 text-blue-400 mb-3" />
+          <div className="text-4xl font-black">{linkCount}</div>
+          <div className="text-white/50 mt-2">Web Links</div>
+        </div>
+
+        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
+          <BarChart3 className="w-6 h-6 text-purple-400 mb-3" />
+          <div className="text-4xl font-black">{SUBJECTS.length}</div>
+          <div className="text-white/50 mt-2">Subjects</div>
+        </div>
+
+      </div>
+
+      <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
+
+        <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+          <Plus className="w-5 h-5 text-emerald-400" />
+          Upload Resource
         </h2>
 
-        <form onSubmit={handleAddResource} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-          
-          <div className="md:col-span-1">
-            <label className="block text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2 ml-1">Type</label>
-            <select 
-              value={fileType} onChange={(e) => setFileType(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none"
-            >
-              <option value="pdf" className="bg-gray-900">PDF Document</option>
-              <option value="link" className="bg-gray-900">Web Link</option>
-            </select>
-          </div>
+        <form
+          onSubmit={handleAddResource}
+          className="grid md:grid-cols-5 gap-4"
+        >
 
-          <div className="md:col-span-1">
-            <label className="block text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2 ml-1">Title</label>
-            <input 
-              type="text" required placeholder="e.g. Modern History Notes"
-              value={title} onChange={(e) => setTitle(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 text-white placeholder-white/30 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-            />
-          </div>
+          <input
+            value={title}
+            onChange={(e)=>setTitle(e.target.value)}
+            placeholder="Title"
+            className="p-3 rounded-xl bg-white/5 border border-white/10"
+          />
 
-          <div className="md:col-span-1">
-            <label className="block text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2 ml-1">File URL</label>
-            <input 
-              type="url" required placeholder="https://..."
-              value={fileUrl} onChange={(e) => setFileUrl(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 text-white placeholder-white/30 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-            />
-          </div>
+          <input
+            value={fileUrl}
+            onChange={(e)=>setFileUrl(e.target.value)}
+            placeholder="File URL"
+            className="p-3 rounded-xl bg-white/5 border border-white/10"
+          />
 
-          <div className="md:col-span-1">
-            <label className="block text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2 ml-1">Subject</label>
-            <select 
-              value={category} onChange={(e) => setCategory(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none"
-            >
-              {SUBJECTS.map(sub => <option key={sub} value={sub} className="bg-gray-900">{sub}</option>)}
-            </select>
-          </div>
+          <select
+            value={category}
+            onChange={(e)=>setCategory(e.target.value)}
+            className="p-3 rounded-xl bg-white/5 border border-white/10"
+          >
+            {SUBJECTS.map(s=><option key={s}>{s}</option>)}
+          </select>
 
-          <div className="md:col-span-1">
-            <button 
-              type="submit" disabled={saving}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-              Save File
-            </button>
-          </div>
+          <select
+            value={fileType}
+            onChange={(e)=>setFileType(e.target.value)}
+            className="p-3 rounded-xl bg-white/5 border border-white/10"
+          >
+            <option value="pdf">PDF</option>
+            <option value="link">Link</option>
+          </select>
+
+          <button
+            disabled={saving}
+            className="bg-emerald-600 rounded-xl font-bold"
+          >
+            {saving ? <Loader2 className="animate-spin mx-auto" /> : 'Save'}
+          </button>
+
         </form>
       </div>
 
-      {/* 2. ORGANIZE DATABASE CARD (Glassmorphism) */}
-      <div className="bg-white/5 backdrop-blur-2xl rounded-[2rem] border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] overflow-hidden">
-        <div className="p-6 md:p-8 border-b border-white/10 bg-white/5">
-          <h2 className="text-xl md:text-2xl font-bold text-white mb-2 flex items-center gap-3">
-            <div className="p-2 bg-blue-500/20 rounded-xl border border-blue-500/30">
-              <FolderOpen className="w-5 h-5 text-blue-400" />
-            </div>
-            Organize Database
-          </h2>
-          <p className="text-sm text-white/50 ml-1">Reassign older files to new folders or delete outdated material.</p>
+      <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
+
+        <div className="flex flex-col md:flex-row gap-4 mb-6">
+
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+            <input
+              value={search}
+              onChange={(e)=>setSearch(e.target.value)}
+              placeholder="Search resources..."
+              className="w-full pl-11 p-3 rounded-xl bg-white/5 border border-white/10"
+            />
+          </div>
+
+          <select
+            value={filter}
+            onChange={(e)=>setFilter(e.target.value)}
+            className="p-3 rounded-xl bg-white/5 border border-white/10"
+          >
+            <option>All</option>
+            {SUBJECTS.map(s=><option key={s}>{s}</option>)}
+          </select>
+
         </div>
 
-        <div className="divide-y divide-white/10 max-h-[600px] overflow-y-auto custom-scrollbar">
-          {resources.length === 0 ? (
-            <div className="p-12 text-center text-white/50">
-              <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p>No resources found in the database.</p>
-            </div>
-          ) : (
-            resources.map((res) => (
-              <div key={res.id} className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-white/5 transition-colors group">
-                
-                {/* Info */}
-                <div className="flex items-center gap-4 flex-1 overflow-hidden w-full">
-                  <div className={`p-3 rounded-xl shrink-0 border shadow-inner ${
-                    res.file_type === 'pdf' ? 'bg-rose-500/20 border-rose-500/30 text-rose-400' : 'bg-indigo-500/20 border-indigo-500/30 text-indigo-400'
-                  }`}>
-                    {res.file_type === 'pdf' ? <FileText className="w-5 h-5" /> : <LinkIcon className="w-5 h-5" />}
-                  </div>
-                  <div className="overflow-hidden">
-                    <h3 className="font-bold text-white truncate text-base">{res.title}</h3>
-                    <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1 font-bold">
-                      {(res.file_type || 'LINK').toUpperCase()} • {new Date(res.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
+        {loading ? (
+          <div className="py-20 flex justify-center">
+            <Loader2 className="animate-spin w-8 h-8 text-emerald-400" />
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
+
+            {filteredResources.map(res=>(
+              <div
+                key={res.id}
+                className="bg-white/5 border border-white/10 rounded-2xl p-5"
+              >
+
+                <div className="flex items-center gap-3 mb-4">
+                  {res.file_type === 'pdf' ? (
+                    <FileText className="text-rose-400" />
+                  ) : (
+                    <LinkIcon className="text-blue-400" />
+                  )}
+
+                  <span className="text-xs text-white/50 uppercase">
+                    {res.file_type}
+                  </span>
                 </div>
 
-                {/* Controls */}
-                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                  <select 
-                    value={res.category || 'History'}
-                    onChange={(e) => handleUpdateCategory(res.id, e.target.value, res.section)}
-                    className="bg-white/5 border border-white/10 text-white/80 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 appearance-none flex-1 md:flex-none md:w-40"
+                <h3 className="font-bold text-lg mb-2">
+                  {res.title}
+                </h3>
+
+                <div className="flex gap-2 mb-4">
+                  <span className="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs">
+                    {res.category}
+                  </span>
+
+                  <span className="px-2 py-1 rounded-lg bg-white/5 text-white/60 text-xs">
+                    {res.section || 'General'}
+                  </span>
+                </div>
+
+                <div className="flex gap-2">
+                  <a
+                    href={res.file_url}
+                    target="_blank"
+                    className="flex-1 text-center py-2 rounded-lg bg-blue-500/10 text-blue-400"
                   >
-                    {SUBJECTS.map(sub => <option key={sub} value={sub} className="bg-gray-900">{sub}</option>)}
-                  </select>
+                    View
+                  </a>
 
-                  <input 
-                    type="text"
-                    value={res.section || ''}
-                    placeholder="Subsection..."
-                    onBlur={(e) => handleUpdateCategory(res.id, res.category, e.target.value)}
-                    onChange={(e) => {
-                      // Optimistic UI update locally so they can type
-                      const updated = resources.map(r => r.id === res.id ? {...r, section: e.target.value} : r);
-                      setResources(updated);
-                    }}
-                    className="bg-white/5 border border-white/10 text-white placeholder-white/30 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 flex-1 md:flex-none md:w-40"
-                  />
-
-                  <button 
-                    onClick={() => handleDelete(res.id)}
-                    className="p-2.5 bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-400 rounded-lg transition-colors border border-rose-500/20 shrink-0"
-                    title="Delete Resource"
+                  <button
+                    onClick={()=>handleDelete(res.id)}
+                    className="p-2 rounded-lg bg-rose-500/10 text-rose-400"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
 
               </div>
-            ))
-          )}
-        </div>
+            ))}
+
+          </div>
+        )}
+
       </div>
 
     </div>

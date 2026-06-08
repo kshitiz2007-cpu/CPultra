@@ -1,199 +1,250 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+// CivilPrep StudentsManager V2
+// Premium dark dashboard version
+
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { 
-  Users, Search, Loader2, Mail, BookOpen, Award, 
-  User, ShieldBan, MoreVertical 
+import {
+  Users,
+  Search,
+  Loader2,
+  Mail,
+  BookOpen,
+  Award,
+  TrendingUp,
+  UserCheck,
+  ShieldBan,
 } from 'lucide-react';
 
 interface StudentData {
-  id: string;
-  name: string;
-  email: string;
-  created_at: string;
-  total_quizzes: number;
-  avg_score: number;
+  id:string;
+  name:string;
+  email:string;
+  created_at:string;
+  total_quizzes:number;
+  avg_score:number;
 }
 
 export default function StudentsManager() {
-  const [students, setStudents] = useState<StudentData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [students,setStudents] = useState<StudentData[]>([]);
+  const [loading,setLoading] = useState(true);
+  const [searchQuery,setSearchQuery] = useState('');
 
   useEffect(() => {
     async function fetchStudents() {
-      setLoading(true);
-      
-      // 1. Fetch all non-admin profiles
       const { data: profiles } = await supabase
         .from('profiles')
         .select('*')
-        .neq('role', 'admin')
-        .order('created_at', { ascending: false });
+        .neq('role','admin');
 
-      // 2. Fetch all attempts to calculate stats
       const { data: attempts } = await supabase
         .from('attempts')
-        .select('user_id, score');
+        .select('user_id,score');
 
       if (profiles && attempts) {
-        // 3. Map attempts to profiles
-        const statsMap: Record<string, { totalScore: number, count: number }> = {};
-        attempts.forEach(a => {
-          if (!statsMap[a.user_id]) statsMap[a.user_id] = { totalScore: 0, count: 0 };
-          statsMap[a.user_id].totalScore += a.score;
-          statsMap[a.user_id].count += 1;
+        const stats:any = {};
+
+        attempts.forEach((a:any)=>{
+          if(!stats[a.user_id]) stats[a.user_id]={score:0,count:0};
+          stats[a.user_id].score += a.score;
+          stats[a.user_id].count += 1;
         });
 
-        const mergedData: StudentData[] = profiles.map(p => {
-          const stats = statsMap[p.id] || { totalScore: 0, count: 0 };
-          return {
-            id: p.id,
-            name: p.name || 'Unknown Student',
-            email: p.email,
-            created_at: p.created_at,
-            total_quizzes: stats.count,
-            avg_score: stats.count > 0 ? Math.round(stats.totalScore / stats.count) : 0
-          };
-        });
-
-        setStudents(mergedData);
+        setStudents(
+          profiles.map((p:any)=>({
+            id:p.id,
+            name:p.name || 'Unknown Student',
+            email:p.email,
+            created_at:p.created_at,
+            total_quizzes:stats[p.id]?.count || 0,
+            avg_score:stats[p.id]
+              ? Math.round(stats[p.id].score / stats[p.id].count)
+              : 0,
+          }))
+        );
       }
+
       setLoading(false);
     }
 
     fetchStudents();
-  }, []);
+  },[]);
 
-  const filteredStudents = students.filter(s => 
-    s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    s.email.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredStudents = useMemo(
+    () =>
+      students.filter(
+        s =>
+          s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          s.email.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [students, searchQuery]
   );
 
+  const avgPlatformScore =
+    students.length > 0
+      ? Math.round(
+          students.reduce((a,b)=>a+b.avg_score,0) / students.length
+        )
+      : 0;
+
+  const totalAttempts = students.reduce(
+    (a,b)=>a+b.total_quizzes,
+    0
+  );
+
+  if (loading) {
+    return (
+      <div className="py-24 flex justify-center">
+        <Loader2 className="animate-spin w-10 h-10 text-emerald-400" />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-8 animate-fade-in">
-      
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-emerald-950 font-serif tracking-tight flex items-center gap-3">
-            <Users className="w-8 h-8 text-blue-600" /> Student Directory
-          </h2>
-          <p className="text-sm text-gray-500 font-medium mt-1">
-            Manage your {students.length} registered learners
-          </p>
+    <div className="space-y-8">
+
+      <div>
+        <h1 className="text-4xl font-black text-white">
+          Students Dashboard
+        </h1>
+        <p className="text-white/60 mt-2">
+          Analytics and learner management.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+
+        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
+          <Users className="w-6 h-6 text-blue-400 mb-3" />
+          <div className="text-4xl font-black text-white">
+            {students.length}
+          </div>
+          <div className="text-white/50 mt-2">
+            Total Students
+          </div>
         </div>
-        
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input 
-            type="text" 
-            placeholder="Search by name or email..." 
-            className="glass-input w-full pl-11 py-3 text-sm rounded-2xl shadow-sm"
+
+        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
+          <UserCheck className="w-6 h-6 text-emerald-400 mb-3" />
+          <div className="text-4xl font-black text-white">
+            {students.filter(s=>s.total_quizzes>0).length}
+          </div>
+          <div className="text-white/50 mt-2">
+            Active Students
+          </div>
+        </div>
+
+        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
+          <Award className="w-6 h-6 text-amber-400 mb-3" />
+          <div className="text-4xl font-black text-white">
+            {avgPlatformScore}%
+          </div>
+          <div className="text-white/50 mt-2">
+            Avg Score
+          </div>
+        </div>
+
+        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
+          <TrendingUp className="w-6 h-6 text-purple-400 mb-3" />
+          <div className="text-4xl font-black text-white">
+            {totalAttempts}
+          </div>
+          <div className="text-white/50 mt-2">
+            Total Attempts
+          </div>
+        </div>
+
+      </div>
+
+      <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
+
+        <div className="relative mb-6">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+          <input
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e)=>setSearchQuery(e.target.value)}
+            placeholder="Search students..."
+            className="w-full pl-11 p-3 rounded-xl bg-white/5 border border-white/10 text-white"
           />
         </div>
-      </div>
 
-      {/* Main Directory Area */}
-      <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-        <div className="p-0 overflow-x-auto">
-          {loading ? (
-            <div className="p-16 flex flex-col items-center justify-center gap-4">
-              <Loader2 className="w-10 h-10 animate-spin text-emerald-500" />
-              <p className="text-sm font-bold text-gray-500 uppercase tracking-widest">Loading Records...</p>
-            </div>
-          ) : filteredStudents.length === 0 ? (
-            <div className="p-16 text-center flex flex-col items-center opacity-60">
-              <Users className="w-16 h-16 text-gray-400 mb-4" />
-              <h3 className="text-lg font-bold text-gray-800">No students found</h3>
-              <p className="text-sm text-gray-500">Try adjusting your search criteria.</p>
-            </div>
-          ) : (
-            <table className="w-full text-left text-sm">
-              <thead className="bg-white/40 text-[10px] uppercase text-gray-500 font-bold tracking-widest border-b border-white/60">
-                <tr>
-                  <th className="px-6 py-5">Student Profile</th>
-                  <th className="px-6 py-5">Engagement</th>
-                  <th className="px-6 py-5">Joined Date</th>
-                  <th className="px-6 py-5 text-right">Actions</th>
+        <div className="overflow-x-auto">
+
+          <table className="w-full text-left">
+
+            <thead className="border-b border-white/10 text-white/50">
+              <tr>
+                <th className="py-4">Student</th>
+                <th>Attempts</th>
+                <th>Average</th>
+                <th>Joined</th>
+                <th></th>
+              </tr>
+            </thead>
+
+            <tbody>
+
+              {filteredStudents.map(student => (
+                <tr
+                  key={student.id}
+                  className="border-b border-white/5 hover:bg-white/5"
+                >
+
+                  <td className="py-4">
+                    <div>
+                      <div className="font-semibold text-white">
+                        {student.name}
+                      </div>
+                      <div className="text-sm text-white/50">
+                        {student.email}
+                      </div>
+                    </div>
+                  </td>
+
+                  <td className="text-white">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-emerald-400" />
+                      {student.total_quizzes}
+                    </div>
+                  </td>
+
+                  <td className="text-emerald-400 font-bold">
+                    {student.avg_score}%
+                  </td>
+
+                  <td className="text-white/60">
+                    {new Date(student.created_at).toLocaleDateString()}
+                  </td>
+
+                  <td>
+                    <div className="flex gap-2 justify-end">
+                      <a
+                        href={`mailto:${student.email}`}
+                        className="p-2 rounded-lg bg-blue-500/10 text-blue-400"
+                      >
+                        <Mail className="w-4 h-4" />
+                      </a>
+
+                      <button
+                        className="p-2 rounded-lg bg-rose-500/10 text-rose-400"
+                      >
+                        <ShieldBan className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-white/40">
-                {filteredStudents.map((student) => (
-                  <tr key={student.id} className="hover:bg-white/50 transition-colors group">
-                    
-                    {/* Profile Column */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-100 to-indigo-100 flex items-center justify-center text-blue-600 font-bold border border-blue-200 shrink-0">
-                          {student.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="font-bold text-gray-900 text-base">{student.name}</div>
-                          <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                            <Mail className="w-3 h-3" /> {student.email}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
+              ))}
 
-                    {/* Stats Column */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-4">
-                        <div className="flex flex-col">
-                          <span className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Tests</span>
-                          <span className="flex items-center gap-1.5 font-bold text-gray-800 bg-white/60 px-2.5 py-1 rounded-lg border border-white">
-                            <BookOpen className="w-3.5 h-3.5 text-emerald-600" /> {student.total_quizzes}
-                          </span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Avg Score</span>
-                          <span className="flex items-center gap-1.5 font-bold text-gray-800 bg-white/60 px-2.5 py-1 rounded-lg border border-white">
-                            <Award className="w-3.5 h-3.5 text-amber-500" /> {student.avg_score}%
-                          </span>
-                        </div>
-                      </div>
-                    </td>
+            </tbody>
 
-                    {/* Date Column */}
-                    <td className="px-6 py-4">
-                      <span className="text-gray-600 font-medium">
-                        {new Date(student.created_at).toLocaleDateString('en-GB', {
-                          day: 'numeric', month: 'short', year: 'numeric'
-                        })}
-                      </span>
-                    </td>
+          </table>
 
-                    {/* Actions Column */}
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <a 
-                          href={`mailto:${student.email}`}
-                          className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl transition-colors border border-blue-100"
-                          title="Email Student"
-                        >
-                          <Mail className="w-4 h-4" />
-                        </a>
-                        <button 
-                          className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition-colors border border-rose-100"
-                          title="Suspend Account (Coming Soon)"
-                          onClick={() => alert("Suspension module integration required via Supabase Edge Functions.")}
-                        >
-                          <ShieldBan className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                    
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
         </div>
+
       </div>
+
     </div>
   );
 }
