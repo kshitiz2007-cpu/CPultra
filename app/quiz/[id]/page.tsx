@@ -1,10 +1,9 @@
 'use client';
+export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { Clock, ChevronRight, ChevronLeft, CheckCircle2, Languages } from 'lucide-react';
-
-// FIXED: We are importing 'supabase' exactly as it exists in your file
+import { Clock, ChevronRight, ChevronLeft, CheckCircle2, Languages, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
 export default function QuizPlayerPage() {
@@ -83,7 +82,6 @@ export default function QuizPlayerPage() {
     setAnswers({ ...answers, [q.id]: optIndex });
   };
 
-  // THE FULL DATABASE SUBMISSION
   const handleSubmit = async () => {
     if (!quiz || !user) return;
     setSubmitting(true);
@@ -154,8 +152,8 @@ export default function QuizPlayerPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="min-h-screen flex items-center justify-center bg-[#020617]">
+        <Loader2 className="w-10 h-10 animate-spin text-emerald-400" />
       </div>
     );
   }
@@ -177,109 +175,127 @@ export default function QuizPlayerPage() {
   const isTimeWarning = timeLeft <= 60;
 
   return (
-    <div className="max-w-3xl mx-auto p-4 md:p-6 pb-24 min-h-screen flex flex-col">
-      <div className="glass-card p-5 mb-6 animate-fade-in">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{quiz.category}</p>
-            <h1 className="text-xl md:text-2xl font-bold text-emerald-950 font-serif">
-              Question {currentQ + 1} of {totalQs}
-            </h1>
-          </div>
-          <div className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 font-mono font-bold shadow-sm ${
-            isTimeWarning ? 'border-red-400 text-red-600 bg-red-50 animate-pulse' : 'border-emerald-200 text-emerald-800 bg-emerald-50'
-          }`}>
-            <Clock className="w-4 h-4" />
-            <span>{timeString}</span>
-          </div>
-        </div>
+    <div className="min-h-screen bg-[#020617] relative flex flex-col selection:bg-emerald-500/30 font-sans">
+      
+      {/* 1. GLOWING AURORA BACKGROUND */}
+      <div className="fixed top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-emerald-600/20 rounded-full blur-[120px] pointer-events-none"></div>
+      <div className="fixed bottom-[-10%] right-[-10%] w-[35rem] h-[35rem] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none"></div>
 
-        <div className="w-full bg-gray-200/50 rounded-full h-2.5 mb-2 overflow-hidden">
-          <div className="bg-emerald-600 h-2.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
-        </div>
-        <div className="flex justify-between text-xs font-semibold text-gray-500">
-          <span>{currentQ} answered</span>
-          <span>{totalQs - currentQ} remaining</span>
-        </div>
-      </div>
-
-      {hasHi && (
-        <div className="flex items-center justify-between bg-orange-50/80 border border-orange-200 p-3 rounded-xl mb-4 backdrop-blur-sm animate-fade-in">
-          <span className="text-sm font-semibold text-orange-800 flex items-center gap-2">
-            <Languages className="w-4 h-4" /> Language / भाषा
-          </span>
-          <div className="flex gap-2">
-            <button onClick={() => setLang('en')} className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${lang === 'en' ? 'bg-white text-orange-600 shadow-sm' : 'text-orange-700/60 hover:bg-orange-100/50'}`}>EN</button>
-            <button onClick={() => setLang('hi')} className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${lang === 'hi' ? 'bg-white text-orange-600 shadow-sm' : 'text-orange-700/60 hover:bg-orange-100/50'}`}>हिंदी</button>
-          </div>
-        </div>
-      )}
-
-      <div className="glass-card p-6 md:p-8 flex-1 animate-fade-in mb-6">
-        <h2 className={`text-lg md:text-xl font-medium text-gray-900 mb-8 leading-relaxed ${isHi ? 'font-serif' : ''}`}>
-          {qText}
-        </h2>
-        <div className="flex flex-col gap-3">
-          {opts.map((opt: string, i: number) => {
-            const isSelected = answers[q.id] === i;
-            return (
-              <div 
-                key={i}
-                onClick={() => handleSelectOption(i)}
-                className={`group flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  isSelected 
-                    ? 'border-emerald-500 bg-emerald-50 shadow-md' 
-                    : 'border-white/60 bg-white/40 hover:border-emerald-300 hover:bg-emerald-50/50'
-                }`}
-              >
-                <div className={`w-8 h-8 shrink-0 flex items-center justify-center rounded-lg border-2 text-sm font-bold transition-colors ${
-                  isSelected 
-                    ? 'bg-emerald-500 border-emerald-500 text-white' 
-                    : 'border-gray-300 text-gray-500 group-hover:border-emerald-400 group-hover:text-emerald-600'
-                }`}>
-                  {String.fromCharCode(65 + i)}
-                </div>
-                <div className={`pt-1 text-base text-gray-800 ${isHi ? 'font-serif' : ''}`}>
-                  {opt}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="flex gap-4 animate-fade-in">
-        {currentQ > 0 && (
-          <button onClick={() => setCurrentQ(prev => prev - 1)} className="flex-1 bg-white/60 hover:bg-white border-2 border-emerald-100 text-emerald-800 font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm">
-            <ChevronLeft className="w-5 h-5" /> Prev
-          </button>
-        )}
+      <div className="max-w-3xl mx-auto w-full p-4 md:p-6 pb-24 flex-1 flex flex-col relative z-10">
         
-        {currentQ < totalQs - 1 ? (
-          <button 
-            onClick={() => {
-              if (answers[q.id] === undefined) { alert('Please select an option to continue.'); return; }
-              setCurrentQ(prev => prev + 1);
-            }}
-            className="flex-1 bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5"
-          >
-            Next <ChevronRight className="w-5 h-5" />
-          </button>
-        ) : (
-          <button 
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="flex-1 bg-gradient-to-r from-emerald-700 to-teal-600 hover:from-emerald-600 hover:to-teal-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            {submitting ? 'Submitting...' : 'Submit Quiz'} <CheckCircle2 className="w-5 h-5" />
-          </button>
-        )}
-      </div>
+        {/* HEADER: Progress & Timer */}
+        <div className="bg-white/5 backdrop-blur-2xl rounded-[2rem] p-6 mb-6 shadow-lg border border-white/10 animate-fade-in text-white">
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-[0.2em] mb-1">{quiz.category}</p>
+              <h1 className="text-xl md:text-2xl font-black text-white tracking-tight drop-shadow-sm">
+                Question {currentQ + 1} <span className="text-white/30 font-normal">of {totalQs}</span>
+              </h1>
+            </div>
+            <div className={`flex items-center gap-2 px-5 py-2.5 rounded-full border shadow-inner font-mono font-bold text-lg ${
+              isTimeWarning ? 'border-rose-500/50 text-rose-400 bg-rose-500/10 animate-pulse' : 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
+            }`}>
+              <Clock className="w-5 h-5" />
+              <span>{timeString}</span>
+            </div>
+          </div>
 
-      <div className="mt-6 text-center">
-        <button onClick={() => { if (confirm('Abandon this quiz? Progress will be lost.')) window.location.href = '/dashboard'; }} className="text-sm font-semibold text-gray-400 hover:text-red-500 transition-colors uppercase tracking-wider">
-          Abandon Quiz
-        </button>
+          <div className="w-full bg-white/10 rounded-full h-2 mb-3 overflow-hidden shadow-inner">
+            <div className="bg-gradient-to-r from-emerald-500 to-teal-400 h-2 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+          </div>
+          
+          <div className="flex justify-between text-[11px] font-bold text-white/50 uppercase tracking-widest">
+            <span>{currentQ} answered</span>
+            <span>{totalQs - currentQ} remaining</span>
+          </div>
+        </div>
+
+        {/* BILINGUAL TOGGLE */}
+        {hasHi && (
+          <div className="flex items-center justify-between bg-white/5 border border-white/10 p-3 rounded-2xl mb-6 backdrop-blur-md animate-fade-in shadow-sm">
+            <span className="text-sm font-bold text-white/70 flex items-center gap-2 px-2">
+              <Languages className="w-4 h-4 text-emerald-400" /> Language / भाषा
+            </span>
+            <div className="flex gap-2">
+              <button onClick={() => setLang('en')} className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${lang === 'en' ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'}`}>EN</button>
+              <button onClick={() => setLang('hi')} className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${lang === 'hi' ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'}`}>हिंदी</button>
+            </div>
+          </div>
+        )}
+
+        {/* QUESTION CARD */}
+        <div className="bg-white/5 backdrop-blur-2xl rounded-[2rem] p-6 md:p-8 border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] flex-1 animate-fade-in mb-6 flex flex-col">
+          <h2 className={`text-xl md:text-2xl font-bold text-white mb-8 leading-relaxed tracking-tight ${isHi ? 'font-serif' : ''}`}>
+            {qText}
+          </h2>
+          
+          <div className="flex flex-col gap-3 mt-auto">
+            {opts.map((opt: string, i: number) => {
+              const isSelected = answers[q.id] === i;
+              return (
+                <div 
+                  key={i}
+                  onClick={() => handleSelectOption(i)}
+                  className={`group flex items-start gap-5 p-5 rounded-2xl border cursor-pointer transition-all ${
+                    isSelected 
+                      ? 'border-emerald-500/50 bg-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.2)]' 
+                      : 'border-white/10 bg-white/5 hover:border-emerald-400/30 hover:bg-white/10'
+                  }`}
+                >
+                  <div className={`w-8 h-8 shrink-0 flex items-center justify-center rounded-xl border text-sm font-bold transition-all ${
+                    isSelected 
+                      ? 'bg-emerald-500 border-emerald-400 text-white shadow-inner' 
+                      : 'border-white/20 bg-white/5 text-white/50 group-hover:border-emerald-400/50 group-hover:text-emerald-400'
+                  }`}>
+                    {String.fromCharCode(65 + i)}
+                  </div>
+                  <div className={`pt-1 text-base md:text-lg font-medium text-white/90 ${isHi ? 'font-serif' : ''}`}>
+                    {opt}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* NAVIGATION CONTROLS */}
+        <div className="flex gap-4 animate-fade-in">
+          {currentQ > 0 && (
+            <button onClick={() => setCurrentQ(prev => prev - 1)} className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold py-4.5 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-sm">
+              <ChevronLeft className="w-5 h-5" /> Prev
+            </button>
+          )}
+          
+          {currentQ < totalQs - 1 ? (
+            <button 
+              onClick={() => {
+                if (answers[q.id] === undefined) { alert('Please select an option to continue.'); return; }
+                setCurrentQ(prev => prev + 1);
+              }}
+              className="flex-1 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 font-bold py-4.5 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+            >
+              Next <ChevronRight className="w-5 h-5" />
+            </button>
+          ) : (
+            <button 
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-white font-bold py-4.5 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-[0_0_30px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? 'Submitting...' : 'Submit Final Quiz'} <CheckCircle2 className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+
+        {/* ABANDON ACTION */}
+        <div className="mt-8 text-center pb-8">
+          <button 
+            onClick={() => { if (confirm('Abandon this quiz? Progress will be lost.')) window.location.href = '/dashboard'; }} 
+            className="text-[11px] font-bold text-white/30 hover:text-rose-400 transition-colors uppercase tracking-widest border-b border-transparent hover:border-rose-400 pb-1"
+          >
+            Abandon Quiz
+          </button>
+        </div>
       </div>
     </div>
   );

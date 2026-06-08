@@ -23,7 +23,7 @@ export default function CsvImporter() {
   const [parsedQuestions, setParsedQuestions] = useState<ParsedQuestion[]>([]);
   const [fileName, setFileName] = useState('');
   const [quizTitle, setQuizTitle] = useState('');
-  const [quizCategory, setQuizCategory] = useState('GS');
+  const [quizCategory, setQuizCategory] = useState('History');
   const [timeLimit, setTimeLimit] = useState(60);
 
   // Download the golden template

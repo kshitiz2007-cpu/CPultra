@@ -4,8 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-// We removed useRouter completely to fix the infinite spinning bug!
-import { Loader2, GraduationCap, ShieldCheck } from 'lucide-react';
+import { Loader2, GraduationCap, ShieldCheck, Sparkles } from 'lucide-react';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -107,31 +106,35 @@ export default function LoginPage() {
 
   if (checkingAuth) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="w-10 h-10 animate-spin text-emerald-600" />
+      <div className="min-h-screen flex items-center justify-center bg-[#020617]">
+        <Loader2 className="w-10 h-10 animate-spin text-emerald-400" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-100 p-4 relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#020617] relative overflow-hidden selection:bg-emerald-500/30">
       
-      <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-200/50 rounded-full blur-3xl"></div>
-      <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-teal-200/50 rounded-full blur-3xl"></div>
+      {/* 1. GLOWING AURORA BACKGROUND */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-emerald-600/20 rounded-full blur-[120px] pointer-events-none"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[35rem] h-[35rem] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none"></div>
+      <div className="absolute top-[30%] left-[20%] w-[25rem] h-[25rem] bg-purple-500/10 rounded-full blur-[100px] pointer-events-none"></div>
 
-      <div className="bg-white/60 backdrop-blur-2xl p-8 md:p-12 rounded-[2.5rem] border border-white shadow-2xl max-w-md w-full z-10 text-center relative">
+      {/* 2. PREMIUM GLASS LOGIN CARD */}
+      <div className="bg-white/10 backdrop-blur-2xl p-8 md:p-12 rounded-[2.5rem] border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] max-w-md w-full z-10 text-center relative animate-fade-in mx-4">
         
-        <div className="w-20 h-20 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-3xl mx-auto flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/30">
-          <GraduationCap className="w-10 h-10 text-white" />
+        {/* Logo Icon */}
+        <div className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-teal-600 rounded-[1.5rem] mx-auto flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.3)] border border-white/20">
+          <Sparkles className="w-10 h-10 text-white" />
         </div>
 
-        <h1 className="text-3xl font-black text-emerald-950 font-serif tracking-tight mb-2">Gyankunj Academy</h1>
-        <p className="text-sm text-gray-600 font-medium mb-10">Sign in or create an account to access study materials and live mock tests.</p>
+        <h1 className="text-3xl md:text-4xl font-black text-white font-serif tracking-tight mb-3 drop-shadow-sm">Gyankunj Academy</h1>
+        <p className="text-sm md:text-base text-white/60 font-medium mb-10 leading-relaxed">Sign in to access your premium study materials and live mock tests.</p>
 
         <button 
           onClick={handleGoogleLogin}
           disabled={loading}
-          className="w-full relative flex items-center justify-center gap-3 bg-white text-gray-800 font-bold py-4 px-6 rounded-2xl border-2 border-gray-100 shadow-sm hover:shadow-md hover:border-emerald-200 hover:bg-emerald-50 transition-all group overflow-hidden"
+          className="w-full relative flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-900 font-bold py-4 px-6 rounded-2xl shadow-xl hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all group overflow-hidden hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
         >
           {loading ? (
             <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
@@ -148,9 +151,11 @@ export default function LoginPage() {
           )}
         </button>
 
-        <div className="mt-8 pt-8 border-t border-gray-200/50 flex flex-col items-center gap-3 opacity-60">
-          <ShieldCheck className="w-5 h-5 text-gray-400" />
-          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest text-center">Secure authentication powered by Supabase & Google</p>
+        <div className="mt-10 pt-8 border-t border-white/10 flex flex-col items-center gap-3">
+          <ShieldCheck className="w-6 h-6 text-emerald-400/50" />
+          <p className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] text-center">
+            Secure authentication by Supabase & Google
+          </p>
         </div>
       </div>
     </div>
