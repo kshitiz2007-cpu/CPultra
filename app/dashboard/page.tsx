@@ -11,6 +11,9 @@ import {
   LayoutDashboard, History
 } from 'lucide-react';
 
+// IMPORT THE NEW CHAT WIDGET HERE
+import StudentChatWidget from '@/components/StudentChatWidget';
+
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
@@ -325,6 +328,10 @@ export default function DashboardPage() {
           </section>
         </div>
       </main>
+
+      {/* PLUG IN THE NEW CHAT WIDGET HERE */}
+      <StudentChatWidget user={user} />
+      
     </div>
   );
 }

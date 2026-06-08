@@ -17,12 +17,13 @@ import QuizManager from './QuizManager';
 import {
   LayoutDashboard, FileQuestion, Users, FileText,
   CreditCard, Sparkles, CalendarClock, TableProperties,
-  LogOut
+  LogOut,MessageSquare
 } from 'lucide-react';
 
 // Sidebar Navigation Configuration
 const ADMIN_TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'inbox', label: 'Inbox', icon: MessageSquare },
   { id: 'quizzes', label: 'Quizzes', icon: FileQuestion },
   { id: 'aigen', label: 'AI Generate', icon: Sparkles },
   { id: 'resources', label: 'Resources', icon: FileText },
@@ -170,6 +171,9 @@ export default function AdminPage() {
 
           {/* OVERVIEW TAB */}
           {activeTab === 'overview' && <AdminOverview setActiveTab={setActiveTab} />}
+
+          {/* INBOX TAB */}
+          {activeTab === 'inbox' && <AdminInbox />}
 
           {/* QUIZZES TAB */}
           {activeTab === 'quizzes' && <QuizManager />}
