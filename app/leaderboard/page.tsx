@@ -1,160 +1,250 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Trophy, Medal, ChevronLeft, Target, BookOpen, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabaseClient';
+import LeaderboardHero from '@/components/leaderboard/LeaderboardHero';
+import TopThree from '@/components/leaderboard/TopThree';
+import LeaderboardTable from '@/components/leaderboard/LeaderboardTable';
 
-interface LeaderboardEntry {
-  user_id: string;
-  name: string;
-  total_quizzes: number;
-  average_score: number;
-  total_points: number;
-}
+import {
+  ArrowLeft,
+  Trophy,
+} from 'lucide-react';
 
 export default function LeaderboardPage() {
   const router = useRouter();
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+
+  // 1. Properly initialize local states
+  const [leaderboardData, setLeaderboardData] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<any>(null);
 
+  // 2. Wrap your data-fetching logic inside a useEffect hook
   useEffect(() => {
-    async function fetchLeaderboard() {
-      // 1. Get current logged-in user
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/');
-        return;
+   async function fetchLeaderboard() {
+  try {
+    setLoading(true);
+
+    const { data: attempts, error } = await supabase
+      .from('attempts')
+      .select(`
+        user_id,
+        user_name,
+        score,
+        completed_at
+      `);
+
+    if (error) throw error;
+
+    const grouped: Record<string, any> = {};
+
+    attempts?.forEach((attempt) => {
+      const userId = attempt.user_id;
+
+      if (!grouped[userId]) {
+        grouped[userId] = {
+          id: userId,
+          name: attempt.user_name || 'Student',
+          testsTaken: 0,
+          totalScore: 0,
+        };
       }
-      setCurrentUser(session.user);
 
-      // 2. Fetch all profiles and attempts
-      const [ { data: profiles }, { data: attempts } ] = await Promise.all([
-        supabase.from('profiles').select('id, name').neq('role', 'admin'),
-        supabase.from('attempts').select('user_id, score')
-      ]);
+      grouped[userId].testsTaken += 1;
+      grouped[userId].totalScore += attempt.score || 0;
+    });
 
-      if (profiles && attempts) {
-        // 3. Aggregate data per student
-        const statsMap: Record<string, { totalScore: number, count: number, name: string }> = {};
-        
-        profiles.forEach(p => {
-          statsMap[p.id] = { totalScore: 0, count: 0, name: p.name || 'Anonymous Student' };
-        });
+    const leaderboard = Object.values(grouped)
+      .map((user: any) => ({
+        ...user,
+        averageScore: Math.round(
+          user.totalScore / user.testsTaken
+        ),
+      }))
+      .sort(
+        (a: any, b: any) =>
+          b.averageScore - a.averageScore
+      )
+      .map((user: any, index: number) => ({
+        ...user,
+        rank: index + 1,
+        percentile:
+          100 -
+          Math.round(
+            (index / Math.max(1, Object.keys(grouped).length)) * 100
+          ),
+      }));
 
-        attempts.forEach(a => {
-          if (statsMap[a.user_id]) {
-            statsMap[a.user_id].totalScore += a.score;
-            statsMap[a.user_id].count += 1;
+    setLeaderboardData(leaderboard);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      const me = leaderboard.find(
+        (u: any) => u.id === user.id
+      );
+
+      setCurrentUser(me || null);
+    }
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setLoading(false);
+  }
+}
           }
-        });
-
-        // 4. Calculate final rankings
-        const ranked: LeaderboardEntry[] = Object.keys(statsMap)
-          .filter(id => statsMap[id].count > 0) // Only show students who took at least 1 quiz
-          .map(id => ({
-            user_id: id,
-            name: statsMap[id].name,
-            total_quizzes: statsMap[id].count,
-            average_score: Math.round(statsMap[id].totalScore / statsMap[id].count),
-            total_points: statsMap[id].totalScore // Using total score as tie-breaker/points system
-          }))
-          .sort((a, b) => b.total_points - a.total_points || b.average_score - a.average_score)
-          .slice(0, 50); // Top 50
-
-        setLeaderboard(ranked);
+        }
+      } catch (err) {
+        console.error('Error fetching leaderboard data:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
 
     fetchLeaderboard();
-  }, [router]);
+  }, []);
 
+  // 3. Prevent rendering errors while async data is loading
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+      <div className="min-h-screen bg-[#020617] text-white flex items-center justify-center">
+        <div className="text-xl font-medium animate-pulse">Loading Rankings...</div>
       </div>
     );
   }
 
-  // Helper to get medal colors for top 3
-  const getRankStyle = (index: number) => {
-    if (index === 0) return 'bg-amber-100 text-amber-600 border-amber-300 shadow-amber-500/20 shadow-lg scale-105 z-10'; // Gold
-    if (index === 1) return 'bg-slate-100 text-slate-500 border-slate-300 shadow-md'; // Silver
-    if (index === 2) return 'bg-orange-100 text-orange-700 border-orange-300 shadow-md'; // Bronze
-    return 'bg-white/40 text-gray-600 border-white/60';
-  };
-
   return (
-    <div className="max-w-3xl mx-auto p-4 md:p-6 pb-24">
-      
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-10 animate-fade-in">
-        <button 
-          onClick={() => router.push('/dashboard')}
-          className="p-3 bg-white/60 hover:bg-white rounded-xl shadow-sm transition-all text-emerald-800 border border-white/60"
-        >
-          <ChevronLeft className="w-6 h-6" />
-        </button>
-        <div>
-          <h1 className="text-3xl font-bold text-emerald-950 font-serif flex items-center gap-3">
-            Hall of Fame <Trophy className="w-7 h-7 text-amber-500" />
-          </h1>
-          <p className="text-sm text-gray-500 mt-1 font-medium">Top performing students across all quizzes</p>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#020617] text-white relative overflow-hidden">
 
-      {/* Leaderboard List */}
-      <div className="flex flex-col gap-4 animate-fade-in" style={{ animationDelay: '150ms' }}>
-        {leaderboard.length === 0 ? (
-          <div className="glass-card p-12 text-center border-dashed border-2 border-emerald-900/10">
-            <Trophy className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-gray-800 mb-1">No ranks yet</h3>
-            <p className="text-sm text-gray-500">Be the first to complete a quiz and claim the #1 spot!</p>
+      {/* Aurora Background */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-yellow-500/10 rounded-full blur-[120px]" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[35rem] h-[35rem] bg-orange-500/10 rounded-full blur-[120px]" />
+
+      <div className="relative z-10 max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-8">
+
+        {/* Header */}
+        <div className="flex items-center justify-between">
+
+          <button
+            onClick={() => router.back()}
+            className="
+              flex items-center gap-2
+              px-4 py-2
+              rounded-xl
+              bg-white/5
+              border border-white/10
+              hover:bg-white/10
+              transition-all
+            "
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+
+          <div className="flex items-center gap-2 text-yellow-400 font-bold">
+            <Trophy className="w-5 h-5" />
+            CivilPrep Rankings
           </div>
-        ) : (
-          leaderboard.map((entry, index) => {
-            const isCurrentUser = entry.user_id === currentUser?.id;
-            const isTop3 = index < 3;
-            
-            return (
-              <div 
-                key={entry.user_id} 
-                className={`glass-card p-4 md:p-5 flex items-center gap-4 transition-all relative border-2 ${getRankStyle(index)} ${isCurrentUser ? 'ring-2 ring-emerald-500' : ''}`}
-              >
-                {/* Rank Badge */}
-                <div className="flex-shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/80 flex items-center justify-center font-bold text-lg md:text-xl shadow-sm">
-                  {index === 0 ? '👑' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
-                </div>
 
-                {/* Student Info */}
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base md:text-lg font-bold truncate flex items-center gap-2">
-                    {entry.name}
-                    {isCurrentUser && <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">You</span>}
-                  </h3>
-                  <div className="flex items-center gap-3 mt-1 text-xs md:text-sm font-semibold opacity-80">
-                    <span className="flex items-center gap-1"><BookOpen className="w-3.5 h-3.5" /> {entry.total_quizzes} Quizzes</span>
-                    <span className="flex items-center gap-1"><Target className="w-3.5 h-3.5" /> {entry.average_score}% Avg</span>
-                  </div>
-                </div>
+        </div>
 
-                {/* Score / Points */}
-                <div className="text-right flex-shrink-0">
-                  <div className="text-2xl font-black font-serif tracking-tighter">
-                    {entry.total_points}
-                  </div>
-                  <div className="text-[10px] font-bold uppercase tracking-widest opacity-70">
-                    Points
-                  </div>
-                </div>
+        {/* Hero */}
+        <LeaderboardHero
+          userRank={currentUser?.rank || 0}
+          averageScore={currentUser?.average_score || 0}
+          totalTests={currentUser?.tests_taken || 0}
+          percentile={currentUser?.percentile || 0}
+        />
+
+        {/* Top Three Component mapped cleanly */}
+        <TopThree
+          first={
+            leaderboardData[0]
+              ? {
+                  id: leaderboardData[0].id,
+                  name: leaderboardData[0].name,
+                  score: leaderboardData[0].average_score,
+                  testsTaken: leaderboardData[0].tests_taken,
+                }
+              : undefined
+          }
+          second={
+            leaderboardData[1]
+              ? {
+                  id: leaderboardData[1].id,
+                  name: leaderboardData[1].name,
+                  score: leaderboardData[1].average_score,
+                  testsTaken: leaderboardData[1].tests_taken,
+                }
+              : undefined
+          }
+          third={
+            leaderboardData[2]
+              ? {
+                  id: leaderboardData[2].id,
+                  name: leaderboardData[2].name,
+                  score: leaderboardData[2].average_score,
+                  testsTaken: leaderboardData[2].tests_taken,
+                }
+              : undefined
+          }
+        />
+
+        {/* User Rank Card: Conditionally rendered only if active user is found */}
+        {currentUser && (
+          <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] backdrop-blur-2xl p-6">
+
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+
+              <div>
+                <h2 className="text-2xl font-black">
+                  Your Position
+                </h2>
+
+                <p className="text-white/50 mt-1">
+                  Keep improving to climb the leaderboard.
+                </p>
               </div>
-            );
-          })
+
+              <div className="flex gap-4">
+
+                <div className="bg-white/5 rounded-xl p-4 min-w-[120px]">
+                  <div className="text-white/50 text-sm">
+                    Rank
+                  </div>
+
+                  <div className="text-3xl font-black text-yellow-400">
+                    #{currentUser.rank}
+                  </div>
+                </div>
+
+                <div className="bg-white/5 rounded-xl p-4 min-w-[120px]">
+                  <div className="text-white/50 text-sm">
+                    Percentile
+                  </div>
+
+                  <div className="text-3xl font-black text-emerald-400">
+                    {currentUser.percentile}%
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
         )}
+
+        {/* Full Rankings Table */}
+        <LeaderboardTable
+          data={leaderboardData}
+        />
+
       </div>
+
     </div>
   );
 }

@@ -7,11 +7,18 @@ import { useRouter } from 'next/navigation';
 import { 
   PlayCircle, Clock, BookOpen, Award, 
   Sparkles, Loader2, ArrowRight, Layers, 
-  FileText, Target, CheckCircle, LogOut, ChevronRight,
-  LayoutDashboard, History
+  FileText, Target, LogOut, ChevronRight,
+  LayoutDashboard, History, Star, Flame, Crown, Trophy
 } from 'lucide-react';
-
-// IMPORT THE NEW CHAT WIDGET HERE
+import HeroSection from '@/components/dashboard/HeroSection';
+import RecommendedResources from '@/components/dashboard/RecommendedResources';
+import StatsCards from '@/components/dashboard/StatsCards';
+import QuickActions from '@/components/dashboard/QuickActions';
+import ContinueLearning from '@/components/dashboard/ContinueLearning';
+import PerformanceAnalytics from '@/components/dashboard/PerformanceAnalytics';
+import AchievementPanel from '@/components/dashboard/AchievementPanel';
+import LeaderboardHero from '@/components/leaderboard/LeaderboardHero';
+import TopThree from '@/components/leaderboard/TopThree';
 import StudentChatWidget from '@/components/StudentChatWidget';
 
 export default function DashboardPage() {
@@ -19,58 +26,168 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [latestQuizzes, setLatestQuizzes] = useState<any[]>([]);
   const [attempts, setAttempts] = useState<any[]>([]);
+  const [resources, setResources] = useState<any[]>([]);
+  const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [platformStats, setPlatformStats] = useState({ quizzes: 0, resources: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadDashboardData() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          window.location.href = '/';
-          return;
+   // ======================================================
+useEffect(() => {
+  async function loadDashboardData() {
+    try {
+      setLoading(true);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        window.location.href = '/';
+        return;
+      }
+
+      // USER PROFILE
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (profile) setUser(profile);
+
+      if (
+        profile?.role === 'admin' ||
+        session.user.email === 'kshitiz2007@gmail.com'
+      ) {
+        window.location.href = '/admin';
+        return;
+      }
+
+      // QUIZZES
+      const { data: quizzesData } = await supabase
+        .from('quizzes')
+        .select('*')
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(4);
+
+      if (quizzesData) setLatestQuizzes(quizzesData);
+
+      // USER ATTEMPTS
+      const { data: attemptsData } = await supabase
+        .from('attempts')
+        .select('*')
+        .eq('user_id', session.user.id);
+
+      if (attemptsData) setAttempts(attemptsData);
+
+      // RESOURCES
+      const { data: resourcesData } = await supabase
+        .from('resources')
+        .select('*')
+        .limit(4);
+
+      if (resourcesData) setResources(resourcesData);
+
+      // PLATFORM COUNTS
+      const { count: quizCount } = await supabase
+        .from('quizzes')
+        .select('*', { count: 'exact', head: true })
+        .eq('active', true);
+
+      const { count: resourceCount } = await supabase
+        .from('resources')
+        .select('*', { count: 'exact', head: true });
+
+      setPlatformStats({
+        quizzes: quizCount || 0,
+        resources: resourceCount || 0,
+      });
+
+      // LEADERBOARD
+      const { data: attemptsLeaderboard, error } = await supabase
+        .from('attempts')
+        .select(`
+          user_id,
+          user_name,
+          score
+        `);
+
+      if (error) throw error;
+
+      const userStatsMap = new Map();
+
+      (attemptsLeaderboard || []).forEach((attempt: any) => {
+        const existing = userStatsMap.get(attempt.user_id);
+
+        if (existing) {
+          existing.totalScore += attempt.score || 0;
+          existing.testsTaken += 1;
+        } else {
+          userStatsMap.set(attempt.user_id, {
+            id: attempt.user_id,
+            name: attempt.user_name || 'Student',
+            totalScore: attempt.score || 0,
+            testsTaken: 1,
+          });
         }
-        
-        // 1. Fetch User Profile
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .maybeSingle();
-          
-        if (profile) setUser(profile);
+      });
 
-        if (profile?.role === 'admin' || session.user.email === 'kshitiz2007@gmail.com') {
-          window.location.href = '/admin';
-          return;
-        }
+      const leaderboardUsers = Array.from(
+        userStatsMap.values()
+      ).map((u: any) => ({
+        id: u.id,
+        name: u.name,
+        testsTaken: u.testsTaken,
+        averageScore: Math.round(
+          u.totalScore / u.testsTaken
+        ),
+      }));
 
-        // 2. Fetch Dashboard Content
-        const { data: quizzesData } = await supabase
-          .from('quizzes')
-          .select('*')
-          .eq('active', true)
-          .order('created_at', { ascending: false })
-          .limit(4);
+      leaderboardUsers.sort(
+        (a: any, b: any) =>
+          b.averageScore - a.averageScore
+      );
 
-        const { data: attemptsData } = await supabase
-          .from('attempts')
-          .select('*')
-          .eq('user_id', session.user.id);
+      const rankedUsers = leaderboardUsers.map(
+        (u: any, index: number) => ({
+          ...u,
+          rank: index + 1,
+          percentile:
+            leaderboardUsers.length > 1
+              ? Math.round(
+                  ((leaderboardUsers.length - (index + 1)) /
+                    leaderboardUsers.length) *
+                    100
+                )
+              : 100,
+        })
+      );
 
-        // 3. Fetch Platform Totals
-        const { count: quizCount } = await supabase
-          .from('quizzes')
-          .select('*', { count: 'exact', head: true })
-          .eq('active', true);
-          
-        const { count: resourceCount } = await supabase
-          .from('resources')
-          .select('*', { count: 'exact', head: true });
+      setLeaderboardData(rankedUsers);
 
-        if (quizzesData) setLatestQuizzes(quizzesData);
-        if (attemptsData) setAttempts(attemptsData);
-        setPlatformStats({ quizzes: quizCount || 0, resources: resourceCount || 0 });
+      const me = rankedUsers.find(
+        (u: any) => u.id === session.user.id
+      );
+
+      if (me) {
+        setCurrentUser(me);
+      }
+
+    } catch (error) {
+      console.error(
+        'Dashboard crashed while loading data:',
+        error
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  loadDashboardData();
+}, []);
         
       } catch (error) {
         console.error("Dashboard crashed while loading data:", error);
@@ -80,7 +197,7 @@ export default function DashboardPage() {
     }
 
     loadDashboardData();
-  }, [router]);
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -91,6 +208,7 @@ export default function DashboardPage() {
   const averageScore = totalAttempted > 0 
     ? Math.round(attempts.reduce((acc, curr) => acc + curr.score, 0) / totalAttempted) 
     : 0;
+    
   const getAttemptForQuiz = (quizId: string) => attempts.find(a => a.quiz_id === quizId);
 
   if (loading) {
@@ -104,20 +222,13 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#020617] relative overflow-hidden flex selection:bg-emerald-500/30">
       
-      {/* ==================================================
-          1. GLOWING AURORA BACKGROUND (Behind everything)
-      ================================================== */}
+      {/* Aurora Background Shadows */}
       <div className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-emerald-600/20 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[35rem] h-[35rem] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="absolute top-[30%] left-[20%] w-[25rem] h-[25rem] bg-purple-500/10 rounded-full blur-[100px] pointer-events-none"></div>
 
-
-      {/* ==================================================
-          2. DESKTOP GLASS SIDEBAR
-      ================================================== */}
+      {/* DESKTOP GLASS SIDEBAR */}
       <aside className="hidden md:flex w-72 h-screen flex-col bg-white/[0.02] border-r border-white/10 backdrop-blur-2xl relative z-20 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
-        
-        {/* Brand/Logo Area */}
         <div className="p-8 pb-6">
           <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-3 font-serif">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 border border-white/20">
@@ -127,14 +238,11 @@ export default function DashboardPage() {
           </h1>
         </div>
 
-        {/* Navigation Links */}
         <nav className="flex-1 px-5 py-4 space-y-3">
-          {/* Active Tab */}
           <button className="w-full flex items-center gap-4 px-4 py-4 bg-white/10 text-emerald-300 border border-white/10 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.15)] font-bold transition-all">
             <LayoutDashboard className="w-5 h-5" /> Dashboard
           </button>
           
-          {/* Inactive Tabs */}
           <button onClick={() => router.push('/quizzes')} className="w-full flex items-center gap-4 px-4 py-4 text-white/50 hover:bg-white/5 hover:text-white rounded-2xl font-bold transition-all group">
             <Layers className="w-5 h-5 group-hover:text-emerald-300 transition-colors" /> Mock Tests
           </button>
@@ -148,7 +256,6 @@ export default function DashboardPage() {
           </button>
         </nav>
 
-        {/* User Profile & Logout */}
         <div className="p-5 border-t border-white/10">
           <div className="flex items-center gap-3 px-4 py-3 bg-white/5 rounded-2xl border border-white/5 mb-4 backdrop-blur-md">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold shadow-inner border border-white/20">
@@ -165,10 +272,7 @@ export default function DashboardPage() {
         </div>
       </aside>
 
-
-      {/* ==================================================
-          3. MOBILE FLOATING GLASS DOCK
-      ================================================== */}
+      {/* MOBILE FLOATING GLASS DOCK */}
       <nav className="md:hidden fixed bottom-6 left-4 right-4 bg-white/10 backdrop-blur-3xl border border-white/20 rounded-3xl z-50 flex justify-between px-2 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
         <button className="flex flex-col items-center p-2 text-emerald-300 relative">
           <div className="absolute inset-0 bg-white/10 rounded-xl"></div>
@@ -189,33 +293,146 @@ export default function DashboardPage() {
         </button>
       </nav>
 
-
-      {/* ==================================================
-          4. MAIN CONTENT AREA
-      ================================================== */}
+      {/* MAIN CONTENT AREA */}
       <main className="flex-1 h-screen overflow-y-auto relative z-10">
         <div className="max-w-5xl mx-auto p-5 md:p-8 pb-32 md:pb-12 space-y-8 animate-fade-in text-white">
           
-          {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mt-4 md:mt-0">
-            <div>
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white/90 drop-shadow-sm font-serif">
-                Welcome back, {user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'Scholar'}! <span className="animate-wave inline-block">👋</span>
-              </h1>
-              <p className="text-sm md:text-base text-emerald-100/70 mt-2 font-medium tracking-wide">
-                Ready to continue your preparation today?
-              </p>
-            </div>
-            {/* Mobile Logout (Desktop is in sidebar) */}
-            <button onClick={handleLogout} className="md:hidden w-fit p-3 bg-white/10 text-rose-300 backdrop-blur-md rounded-2xl shadow-lg flex items-center gap-2 border border-white/10 font-bold">
+          <HeroSection
+            userName={user?.name || 'Scholar'}
+            testsTaken={totalAttempted}
+            averageScore={averageScore}
+            streakDays={attempts.length}
+            rank={currentUser?.rank || 0}
+            onContinue={() => router.push('/quizzes')}
+          />
+          
+          <StatsCards
+            testsTaken={totalAttempted}
+            averageScore={averageScore}
+            streakDays={attempts.length}
+            rank={currentUser?.rank || 0}
+            studyHours={0}
+            improvement={12}
+          />
+          
+          <ContinueLearning
+            quizTitle="Indian Polity Mock Test 5"
+            category="Polity"
+            progress={68}
+            questions={100}
+            onResume={() => router.push('/quiz/polity-mock-5')}
+          />
+          
+          <QuickActions
+            onStartQuiz={() => router.push('/quizzes')}
+            onResources={() => router.push('/resources')}
+            onCurrentAffairs={() => router.push('/current-affairs')}
+            onLeaderboard={() => router.push('/leaderboard')}
+            onAiQuiz={() => router.push('/ai-quiz')}
+            onNotes={() => router.push('/resources')}
+          />
+          
+          <RecommendedResources
+            resources={resources}
+            onViewAll={() => router.push('/resources')}
+          />
+          
+          <PerformanceAnalytics
+            data={[
+              { subject: 'History', score: 82 },
+              { subject: 'Polity', score: 76 },
+              { subject: 'Economy', score: 68 },
+              { subject: 'Geography', score: 79 },
+              { subject: 'Environment', score: 72 },
+            ]}
+          />
+          
+          <AchievementPanel
+            achievements={[
+              {
+                id: '1',
+                title: 'First Test',
+                description: 'Complete your first mock test',
+                unlocked: true,
+                icon: <Target className="w-5 h-5 text-yellow-400" />,
+              },
+              {
+                id: '2',
+                title: '10 Tests Completed',
+                description: 'Attempt ten mock tests',
+                unlocked: true,
+                icon: <Award className="w-5 h-5 text-yellow-400" />,
+              },
+              {
+                id: '3',
+                title: '75% Average',
+                description: 'Maintain a score above 75%',
+                unlocked: false,
+                icon: <Star className="w-5 h-5 text-yellow-400" />,
+              },
+              {
+                id: '4',
+                title: '7 Day Streak',
+                description: 'Study for 7 consecutive days',
+                unlocked: true,
+                icon: <Flame className="w-5 h-5 text-orange-400" />,
+              },
+              {
+                id: '5',
+                title: 'Polity Master',
+                description: 'Score 80%+ in Polity',
+                unlocked: false,
+                icon: <Crown className="w-5 h-5 text-purple-400" />,
+              },
+              {
+                id: '6',
+                title: 'Current Affairs Expert',
+                description: 'Complete 20 current affairs quizzes',
+                unlocked: false,
+                icon: <Trophy className="w-5 h-5 text-yellow-400" />,
+              },
+            ]}
+          />
+
+          {/* Corrected Leaderboard Display Elements */}
+         }
+          />
+          
+          <TopThree
+            first={leaderboardData[0] ? {
+              id: leaderboardData[0].id,
+              name: leaderboardData[0].name,
+              score: leaderboardData[0].averageScore,
+              testsTaken: leaderboardData[0].testsTaken
+            } : undefined}
+            second={leaderboardData[1] ? {
+              id: leaderboardData[1].id,
+              name: leaderboardData[1].name,
+              score: leaderboardData[1].averageScore,
+              testsTaken: leaderboardData[1].testsTaken
+            } :
+             <LeaderboardHero
+            userRank={currentUser?.rank || 0}
+            averageScore={currentUser?.averageScore || 0}
+            totalTests={currentUser?.testsTaken || 0}
+             percentile={currentUser?.percentile || 0}
+            third={leaderboardData[2] ? {
+              id: leaderboardData[2].id,
+              name: leaderboardData[2].name,
+              score: leaderboardData[2].averageScore,
+              testsTaken: leaderboardData[2].testsTaken
+            } : undefined}
+          />
+
+          {/* Mobile Logout Row */}
+          <div className="flex md:hidden justify-start pt-4">
+            <button onClick={handleLogout} className="w-fit p-3 bg-white/10 text-rose-300 backdrop-blur-md rounded-2xl shadow-lg flex items-center gap-2 border border-white/10 font-bold">
               <LogOut className="w-4 h-4" /> <span className="text-sm">Sign Out</span>
             </button>
           </div>
 
-          {/* Premium Glass Bento Grid */}
+          {/* Premium Glass Bento Grid Metrics */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-            
-            {/* Glass Card 1 */}
             <button 
               onClick={() => router.push('/history')}
               className="bg-white/10 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] flex flex-col justify-between hover:-translate-y-2 hover:bg-white/20 hover:border-emerald-400/50 transition-all group text-left relative overflow-hidden"
@@ -233,9 +450,8 @@ export default function DashboardPage() {
               </div>
             </button>
 
-            {/* Glass Card 2 */}
             <div className="bg-white/10 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] flex flex-col justify-between relative overflow-hidden">
-               <div className="absolute -right-10 -top-10 w-32 h-32 bg-amber-400/20 rounded-full blur-2xl -z-10"></div>
+              <div className="absolute -right-10 -top-10 w-32 h-32 bg-amber-400/20 rounded-full blur-2xl -z-10"></div>
               <div className="p-3 bg-white/10 text-amber-300 rounded-2xl w-fit mb-4 border border-white/10">
                 <Award className="w-6 h-6" />
               </div>
@@ -245,7 +461,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Action Card (Mock Tests) */}
             <button 
               onClick={() => router.push('/quizzes')}
               className="col-span-2 bg-gradient-to-br from-emerald-500/80 to-teal-700/80 backdrop-blur-2xl rounded-[2rem] p-8 border border-white/30 shadow-[0_8px_32px_0_rgba(16,185,129,0.3)] relative overflow-hidden group text-left flex flex-col justify-between hover:scale-[1.02] transition-transform min-h-[180px]"
@@ -266,7 +481,7 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          {/* Latest Quizzes Section */}
+          {/* Latest Quizzes Modules Component Grid */}
           <section className="pt-8">
             <div className="flex items-end justify-between mb-6 px-2">
               <div>
@@ -329,7 +544,7 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      {/* PLUG IN THE NEW CHAT WIDGET HERE */}
+      {/* CHAT WIDGET INTERACTION AREA */}
       <StudentChatWidget user={user} />
       
     </div>
