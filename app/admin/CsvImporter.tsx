@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { UploadCloud, FileSpreadsheet, Save, Loader2, CheckCircle, Trash2, Download } from 'lucide-react';
+import { UploadCloud, FileSpreadsheet, Save, Loader2, CheckCircle, Trash2, Info } from 'lucide-react';
 
 interface ParsedQuestion {
   text: string;
@@ -10,45 +10,28 @@ interface ParsedQuestion {
   options: string[];
   optionsHi: string[];
   correct: number;
-  explanation?: string;
-  explanationHi?: string;
 }
+
+const CATEGORIES = ['History','Geography','Polity','Economy','Science & Tech','Environment','Current Affairs','Maths','Reasoning','GS'];
 
 export default function CsvImporter() {
   const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // Data States
+
   const [parsedQuestions, setParsedQuestions] = useState<ParsedQuestion[]>([]);
   const [fileName, setFileName] = useState('');
   const [quizTitle, setQuizTitle] = useState('');
-  const [quizCategory, setQuizCategory] = useState('History');
+  const [quizCategory, setQuizCategory] = useState('GS');
   const [timeLimit, setTimeLimit] = useState(60);
 
-  // Download the golden template
-  const downloadTemplate = () => {
-    const csvContent = `"Question_EN","Question_HI","Option1_EN","Option2_EN","Option3_EN","Option4_EN","Option1_HI","Option2_HI","Option3_HI","Option4_HI","Correct_Option","Explanation_EN","Explanation_HI"\n"Who was the first Governor-General of independent India?","स्वतंत्र भारत के पहले गवर्नर-जनरल कौन थे?","Lord Mountbatten","C. Rajagopalachari","Rajendra Prasad","Jawaharlal Nehru","लॉर्ड माउंटबेटन","सी. राजगोपालाचारी","राजेंद्र प्रसाद","जवाहरलाल नेहरू",1,"Lord Mountbatten served as the first Governor-General of independent India until June 1948.","लॉर्ड माउंटबेटन ने जून 1948 तक स्वतंत्र भारत के पहले गवर्नर-जनरल के रूप में कार्य किया।"\n"Which planet is known as the Red Planet?","किस ग्रह को लाल ग्रह के नाम से जाना जाता है?","Venus","Jupiter","Mars","Saturn","शुक्र","बृहस्पति","मंगल","शनि",3,"Mars appears red due to iron oxide (rust) on its surface.","मंगल ग्रह अपनी सतह पर आयरन ऑक्साइड (जंग) के कारण लाल दिखाई देता है।"`;
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", "Bilingual_Quiz_Template.csv");
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // Robust manual CSV row splitter (handles commas inside quotes)
   const parseCsvRow = (str: string) => {
     const result = [];
     let current = '';
     let inQuotes = false;
     for (let i = 0; i < str.length; i++) {
       const char = str[i];
-      if (char === '"' && str[i + 1] === '"') { current += '"'; i++; } // escaped quote
+      if (char === '"' && str[i + 1] === '"') { current += '"'; i++; }
       else if (char === '"') { inQuotes = !inQuotes; }
       else if (char === ',' && !inQuotes) { result.push(current.trim()); current = ''; }
       else { current += char; }
@@ -58,9 +41,7 @@ export default function CsvImporter() {
   };
 
   const processFile = (file: File) => {
-    if (!file.name.endsWith('.csv')) {
-      return alert('Please upload a valid .csv file');
-    }
+    if (!file.name.endsWith('.csv')) return alert('Please upload a valid .csv file');
     setFileName(file.name);
     setQuizTitle(file.name.replace('.csv', ''));
 
@@ -68,23 +49,15 @@ export default function CsvImporter() {
     reader.onload = (e) => {
       const text = e.target?.result as string;
       const lines = text.split('\n').filter(line => line.trim() !== '');
-      
-      // Skip header row (lines[0])
       const questions: ParsedQuestion[] = [];
       for (let i = 1; i < lines.length; i++) {
         const cols = parseCsvRow(lines[i]);
-        if (cols.length >= 11) { // 11 is bare minimum, 13 includes explanations
-          // We subtract 1 from the Correct_Option (1-4) to match the array index (0-3)
-          const correctIndex = (parseInt(cols[10]) || 1) - 1; 
-
+        if (cols.length >= 11) {
           questions.push({
-            text: cols[0],
-            textHi: cols[1],
+            text: cols[0], textHi: cols[1],
             options: [cols[2], cols[3], cols[4], cols[5]],
             optionsHi: [cols[6], cols[7], cols[8], cols[9]],
-            correct: correctIndex >= 0 && correctIndex <= 3 ? correctIndex : 0,
-            explanation: cols[11] || '',
-            explanationHi: cols[12] || ''
+            correct: parseInt(cols[10]) || 0
           });
         }
       }
@@ -96,15 +69,12 @@ export default function CsvImporter() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      processFile(e.dataTransfer.files[0]);
-    }
+    if (e.dataTransfer.files?.[0]) processFile(e.dataTransfer.files[0]);
   };
 
   const saveToDatabase = async () => {
-    if (parsedQuestions.length === 0 || !quizTitle) return;
+    if (!parsedQuestions.length || !quizTitle) return;
     setLoading(true);
-
     const newQuiz = {
       id: `q_${Date.now()}`,
       title: quizTitle,
@@ -113,212 +83,196 @@ export default function CsvImporter() {
       time_limit: timeLimit,
       is_paid: false,
       price: 0,
-      active: true, // Save as draft
+      active: false,
       questions: parsedQuestions.map((q, i) => ({ id: `csv_${Date.now()}_${i}`, ...q }))
     };
-
     const { error } = await supabase.from('quizzes').insert([newQuiz]);
-
     setLoading(false);
     if (error) {
       alert('Error saving quiz: ' + error.message);
     } else {
-      alert('Quiz successfully imported to drafts! 🎉');
-      setParsedQuestions([]);
-      setFileName('');
-      setQuizTitle('');
+      alert('Quiz successfully imported to drafts!');
+      setParsedQuestions([]); setFileName(''); setQuizTitle('');
     }
   };
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-black text-emerald-950 font-serif tracking-tight flex items-center gap-3">
-          <FileSpreadsheet className="w-8 h-8 text-blue-600" /> Bulk CSV Import
-        </h2>
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-bold" style={{ color: '#0F172A' }}>CSV Import</h1>
+        <p className="text-sm mt-0.5" style={{ color: '#64748B' }}>Bulk-import quiz questions from a spreadsheet.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Left Column: Upload & Setup */}
-        <div className="lg:col-span-1 space-y-6">
-          
-          {/* Download Template Card */}
-          <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] p-6 border border-white/60 shadow-sm relative overflow-hidden group">
-            <div className="absolute -right-6 -top-6 w-24 h-24 bg-blue-400/20 rounded-full blur-2xl"></div>
-            <h3 className="font-bold text-gray-900 mb-2 relative z-10">1. Prepare your data</h3>
-            <p className="text-sm text-gray-600 mb-4 relative z-10">
-              Ensure your CSV has these exact 13 columns in order: <br/>
-              <span className="text-xs font-mono bg-white/60 px-2 py-2 rounded mt-2 block leading-relaxed border border-gray-200">
-                Question_EN, Question_HI,<br/>
-                Option1..4_EN, Option1..4_HI,<br/>
-                Correct_Option (1-4),<br/>
-                Explanation_EN, Explanation_HI
-              </span>
-            </p>
-            <button 
-              onClick={downloadTemplate}
-              className="w-full flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-bold py-2.5 rounded-xl transition-colors border border-blue-200 relative z-10"
-            >
-              <Download className="w-4 h-4" /> Download Sample CSV
-            </button>
-          </div>
+      {/* Format reference */}
+      <div
+        className="flex items-start gap-3 p-4 rounded-lg"
+        style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }}
+      >
+        <Info className="w-4 h-4 mt-0.5 shrink-0" style={{ color: '#3B82F6' }} />
+        <div>
+          <p className="text-sm font-semibold" style={{ color: '#1D4ED8' }}>Required CSV format — 11 columns in order:</p>
+          <code
+            className="text-xs mt-1 block px-2 py-1 rounded font-mono"
+            style={{ background: '#DBEAFE', color: '#1E40AF' }}
+          >
+            EN_Q, HI_Q, EN_Opt1, EN_Opt2, EN_Opt3, EN_Opt4, HI_Opt1, HI_Opt2, HI_Opt3, HI_Opt4, CorrectIndex(0–3)
+          </code>
+        </div>
+      </div>
 
-          {/* Drag & Drop Zone */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+        {/* LEFT: Upload + metadata */}
+        <div className="lg:col-span-1 space-y-4">
+
+          {/* Drop zone / file uploaded */}
           {!parsedQuestions.length ? (
-            <div 
+            <div
               onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`bg-white/40 backdrop-blur-xl rounded-[2rem] p-10 border-2 border-dashed cursor-pointer transition-all flex flex-col items-center justify-center text-center ${
-                isDragging ? 'border-blue-500 bg-blue-50/50 scale-[1.02]' : 'border-emerald-900/20 hover:bg-white/60 hover:border-emerald-900/40'
-              }`}
+              className="panel p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all"
+              style={{
+                borderStyle: 'dashed',
+                borderColor: isDragging ? '#6366F1' : '#CBD5E1',
+                background: isDragging ? '#EEF2FF' : 'white',
+              }}
             >
-              <input 
-                type="file" 
-                accept=".csv" 
-                className="hidden" 
-                ref={fileInputRef}
-                onChange={(e) => e.target.files && processFile(e.target.files[0])}
+              <input type="file" accept=".csv" className="hidden" ref={fileInputRef}
+                onChange={(e) => e.target.files && processFile(e.target.files[0])} />
+              <UploadCloud
+                className="w-8 h-8 mb-3"
+                style={{ color: isDragging ? '#6366F1' : '#94A3B8' }}
               />
-              <UploadCloud className={`w-12 h-12 mb-4 transition-colors ${isDragging ? 'text-blue-500' : 'text-gray-400'}`} />
-              <h3 className="text-lg font-bold text-gray-800 mb-1">Click or Drag CSV here</h3>
-              <p className="text-sm text-gray-500">Maximum file size: 5MB</p>
+              <p className="text-sm font-semibold" style={{ color: '#0F172A' }}>
+                {isDragging ? 'Drop to upload' : 'Click or drag CSV here'}
+              </p>
+              <p className="text-xs mt-1" style={{ color: '#94A3B8' }}>Max 5MB · .csv only</p>
             </div>
           ) : (
-            <div className="bg-emerald-50 backdrop-blur-xl rounded-[2rem] p-6 border border-emerald-200 shadow-sm flex items-center justify-between">
-              <div className="flex items-center gap-3 overflow-hidden">
-                <CheckCircle className="w-8 h-8 text-emerald-600 shrink-0" />
-                <div className="truncate">
-                  <h3 className="font-bold text-emerald-900 truncate">{fileName}</h3>
-                  <p className="text-xs text-emerald-700 font-semibold">{parsedQuestions.length} questions parsed</p>
+            <div
+              className="panel p-4 flex items-center justify-between"
+              style={{ background: '#ECFDF5', borderColor: '#A7F3D0' }}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <CheckCircle className="w-5 h-5 shrink-0" style={{ color: '#10B981' }} />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold truncate" style={{ color: '#065F46' }}>{fileName}</p>
+                  <p className="text-xs" style={{ color: '#059669' }}>{parsedQuestions.length} questions parsed</p>
                 </div>
               </div>
-              <button onClick={() => setParsedQuestions([])} className="p-2 bg-white/60 hover:bg-red-100 hover:text-red-600 rounded-xl transition-colors shrink-0">
-                <Trash2 className="w-5 h-5" />
+              <button
+                onClick={() => setParsedQuestions([])}
+                className="btn btn-icon btn-sm shrink-0"
+                style={{ color: '#EF4444', background: 'white' }}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
 
-          {/* Quiz Metadata Form */}
-          <div className={`transition-all duration-500 ${parsedQuestions.length ? 'opacity-100 translate-y-0' : 'opacity-50 pointer-events-none translate-y-4'}`}>
-            <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] p-6 border border-white/60 shadow-sm space-y-4">
-              <h3 className="font-bold text-gray-900 mb-2">2. Module Details</h3>
-              
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Title</label>
-                <input 
-                  type="text" 
-                  className="glass-input w-full rounded-xl p-3 border border-gray-200"
-                  value={quizTitle}
-                  onChange={(e) => setQuizTitle(e.target.value)}
-                />
-              </div>
+          {/* Metadata form */}
+          <div
+            className="panel p-4 space-y-3 transition-opacity"
+            style={{ opacity: parsedQuestions.length ? 1 : 0.45, pointerEvents: parsedQuestions.length ? 'auto' : 'none' }}
+          >
+            <p className="text-sm font-semibold" style={{ color: '#0F172A' }}>Module details</p>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Category</label>
-                  <select 
-                    className="glass-input w-full rounded-xl p-3 border border-gray-200"
-                    value={quizCategory}
-                    onChange={(e) => setQuizCategory(e.target.value)}
-                  >
-                    <option value="History">History</option>
-                    <option value="Geography">Geography</option>
-                    <option value="Polity">Polity</option>
-                    <option value="Economy">Economy</option>
-                    <option value="Science & Tech">Sci & Tech</option>
-                    <option value="Current Affairs">Current Affairs</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Time (Mins)</label>
-                  <input 
-                    type="number" 
-                    className="glass-input w-full rounded-xl p-3 border border-gray-200"
-                    value={timeLimit}
-                    onChange={(e) => setTimeLimit(Number(e.target.value))}
-                  />
-                </div>
-              </div>
-
-              <button 
-                onClick={saveToDatabase}
-                disabled={loading || !parsedQuestions.length || !quizTitle}
-                className="w-full mt-4 bg-emerald-950 hover:bg-emerald-800 text-white font-bold py-4 rounded-xl transition-all shadow-md disabled:opacity-50 flex justify-center items-center gap-2"
-              >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                {loading ? 'Importing...' : 'Save to Drafts'}
-              </button>
+            <div>
+              <label className="form-label">Quiz title</label>
+              <input type="text" className="form-input" value={quizTitle} onChange={e => setQuizTitle(e.target.value)} />
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="form-label">Category</label>
+                <select className="form-input" value={quizCategory} onChange={e => setQuizCategory(e.target.value)}>
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Time (mins)</label>
+                <input type="number" className="form-input" value={timeLimit} onChange={e => setTimeLimit(Number(e.target.value))} />
+              </div>
+            </div>
+
+            <button
+              onClick={saveToDatabase}
+              disabled={loading || !parsedQuestions.length || !quizTitle}
+              className="btn btn-primary w-full justify-center mt-1"
+            >
+              {loading
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Importing…</>
+                : <><Save className="w-4 h-4" /> Save to Drafts</>
+              }
+            </button>
           </div>
         </div>
 
-        {/* Right Column: Live Data Preview */}
+        {/* RIGHT: Preview */}
         <div className="lg:col-span-2">
-          <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-sm h-full min-h-[500px] flex flex-col overflow-hidden">
-            <div className="p-6 border-b border-white/60 bg-white/20">
-              <h3 className="font-bold text-gray-900">3. Data Preview</h3>
-              <p className="text-xs text-gray-500 font-medium mt-1">Review the parsed CSV rows before importing.</p>
+          <div className="panel overflow-hidden h-full" style={{ minHeight: 400 }}>
+            <div className="panel-header">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4" style={{ color: '#6366F1' }} />
+                <span className="text-sm font-semibold" style={{ color: '#0F172A' }}>Data Preview</span>
+              </div>
+              {parsedQuestions.length > 0 && (
+                <span className="text-xs" style={{ color: '#94A3B8' }}>
+                  Showing first {Math.min(10, parsedQuestions.length)} of {parsedQuestions.length}
+                </span>
+              )}
             </div>
-            
-            <div className="p-6 flex-1 overflow-auto">
+
+            <div className="p-4 overflow-auto" style={{ maxHeight: 560 }}>
               {!parsedQuestions.length ? (
-                <div className="h-full flex flex-col items-center justify-center text-center opacity-50">
-                  <FileSpreadsheet className="w-16 h-16 text-gray-400 mb-4" />
-                  <p className="text-sm font-bold text-gray-600">No data loaded.</p>
-                  <p className="text-xs text-gray-500">Upload a CSV to see the preview here.</p>
+                <div className="flex flex-col items-center justify-center py-16" style={{ color: '#94A3B8' }}>
+                  <FileSpreadsheet className="w-8 h-8 mb-3" />
+                  <p className="text-sm font-medium">No data loaded yet</p>
+                  <p className="text-xs mt-1">Upload a CSV to preview it here.</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {parsedQuestions.slice(0, 10).map((q, i) => (
-                    <div key={i} className="bg-white/60 rounded-xl p-4 border border-white/80 shadow-sm text-sm">
-                      
-                      {/* English Row */}
-                      <div className="flex gap-2 mb-2">
-                        <span className="font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded text-xs h-fit">EN</span>
-                        <span className="font-semibold text-gray-800 flex-1">{q.text}</span>
+                    <div key={i} className="rounded-lg p-3" style={{ border: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+                      <div className="flex items-start gap-2 mb-2">
+                        <span
+                          className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5"
+                          style={{ background: '#EEF2FF', color: '#6366F1' }}
+                        >
+                          Q{i + 1}
+                        </span>
+                        <span className="text-xs font-medium line-clamp-2" style={{ color: '#0F172A' }}>{q.text}</span>
                       </div>
-                      
-                      {/* Hindi Row */}
-                      <div className="flex gap-2 mb-4">
-                        <span className="font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded text-xs h-fit">HI</span>
-                        <span className="font-semibold text-gray-800 flex-1">{q.textHi}</span>
-                      </div>
-
-                      {/* Options Grid */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-600 mt-3">
+                      <div className="grid grid-cols-2 gap-1.5">
                         {q.options.map((opt, oIdx) => (
-                          <div key={oIdx} className={`p-2 rounded-lg border ${q.correct === oIdx ? 'bg-emerald-100 border-emerald-300 font-bold text-emerald-800' : 'bg-white border-gray-100'}`}>
+                          <div
+                            key={oIdx}
+                            className="text-xs px-2 py-1 rounded"
+                            style={{
+                              background: q.correct === oIdx ? '#ECFDF5' : 'white',
+                              border: `1px solid ${q.correct === oIdx ? '#A7F3D0' : '#E2E8F0'}`,
+                              color: q.correct === oIdx ? '#065F46' : '#475569',
+                              fontWeight: q.correct === oIdx ? 600 : 400,
+                            }}
+                          >
                             {String.fromCharCode(65 + oIdx)}. {opt}
-                            <div className="text-[10px] text-gray-400 mt-1 pt-1 border-t border-gray-200/50">{q.optionsHi[oIdx]}</div>
                           </div>
                         ))}
                       </div>
-
-                      {/* Explanation Preview */}
-                      {(q.explanation || q.explanationHi) && (
-                        <div className="mt-3 p-3 bg-blue-50/50 rounded-lg border border-blue-100 text-xs">
-                          <span className="font-bold text-blue-800 block mb-1">Explanation:</span>
-                          <p className="text-blue-900 mb-1">{q.explanation}</p>
-                          <p className="text-blue-700">{q.explanationHi}</p>
-                        </div>
-                      )}
-
                     </div>
                   ))}
                   {parsedQuestions.length > 10 && (
-                    <div className="text-center py-4 text-sm font-bold text-gray-400">
-                      + {parsedQuestions.length - 10} more questions hidden for preview
-                    </div>
+                    <p className="text-xs text-center py-3" style={{ color: '#94A3B8' }}>
+                      + {parsedQuestions.length - 10} more questions not shown
+                    </p>
                   )}
                 </div>
               )}
             </div>
           </div>
         </div>
-
       </div>
     </div>
   );

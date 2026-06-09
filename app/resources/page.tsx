@@ -1,34 +1,29 @@
 'use client';
-export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
-import { 
-  FolderOpen, ChevronLeft, Loader2, Search, Landmark, Globe, 
-  Scale, TrendingUp, Microscope, Leaf, Newspaper, Calculator, 
-  Lightbulb, FileText, Layers, ExternalLink, Download, LayoutDashboard, History, LogOut, Sparkles
+import {
+  ChevronLeft, Loader2, Search, Landmark, Globe,
+  Scale, TrendingUp, Microscope, Leaf, Newspaper, Calculator,
+  Lightbulb, FileText, Layers, ExternalLink, Download, BookOpen, FolderOpen
 } from 'lucide-react';
 
 interface Resource {
-  id: string;
-  title: string;
-  file_type: string;
-  file_url: string;
-  category: string;
-  section: string;
+  id: string; title: string; file_type: string;
+  file_url: string; category: string; section: string;
 }
 
 const SUBJECT_CONFIG = [
-  { id: 'History', group: 'GS', icon: Landmark, color: 'text-amber-400', bg: 'bg-amber-500/20', border: 'border-amber-500/30' },
-  { id: 'Geography', group: 'GS', icon: Globe, color: 'text-blue-400', bg: 'bg-blue-500/20', border: 'border-blue-500/30' },
-  { id: 'Polity', group: 'GS', icon: Scale, color: 'text-purple-400', bg: 'bg-purple-500/20', border: 'border-purple-500/30' },
-  { id: 'Economy', group: 'GS', icon: TrendingUp, color: 'text-emerald-400', bg: 'bg-emerald-500/20', border: 'border-emerald-500/30' },
-  { id: 'Science & Tech', group: 'GS', icon: Microscope, color: 'text-indigo-400', bg: 'bg-indigo-500/20', border: 'border-indigo-500/30' },
-  { id: 'Environment', group: 'GS', icon: Leaf, color: 'text-green-400', bg: 'bg-green-500/20', border: 'border-green-500/30' },
-  { id: 'Current Affairs', group: 'Other', icon: Newspaper, color: 'text-rose-400', bg: 'bg-rose-500/20', border: 'border-rose-500/30' },
-  { id: 'Maths', group: 'Other', icon: Calculator, color: 'text-sky-400', bg: 'bg-sky-500/20', border: 'border-sky-500/30' },
-  { id: 'Reasoning', group: 'Other', icon: Lightbulb, color: 'text-yellow-400', bg: 'bg-yellow-500/20', border: 'border-yellow-500/30' },
+  { id: 'History',        group: 'GS',    icon: Landmark,   iconBg: '#FFFBEB', iconColor: '#D97706', accent: '#F59E0B' },
+  { id: 'Geography',      group: 'GS',    icon: Globe,      iconBg: '#EFF6FF', iconColor: '#2563EB', accent: '#3B82F6' },
+  { id: 'Polity',         group: 'GS',    icon: Scale,      iconBg: '#F5F3FF', iconColor: '#7C3AED', accent: '#8B5CF6' },
+  { id: 'Economy',        group: 'GS',    icon: TrendingUp, iconBg: '#ECFDF5', iconColor: '#059669', accent: '#10B981' },
+  { id: 'Science & Tech', group: 'GS',    icon: Microscope, iconBg: '#EEF2FF', iconColor: '#4F46E5', accent: '#6366F1' },
+  { id: 'Environment',    group: 'GS',    icon: Leaf,       iconBg: '#F0FDF4', iconColor: '#16A34A', accent: '#22C55E' },
+  { id: 'Current Affairs',group: 'Other', icon: Newspaper,  iconBg: '#FFF1F2', iconColor: '#E11D48', accent: '#F43F5E' },
+  { id: 'Maths',          group: 'Other', icon: Calculator, iconBg: '#F0F9FF', iconColor: '#0284C7', accent: '#0EA5E9' },
+  { id: 'Reasoning',      group: 'Other', icon: Lightbulb,  iconBg: '#FEFCE8', iconColor: '#CA8A04', accent: '#EAB308' },
 ];
 
 export default function StudentResourcesPage() {
@@ -37,275 +32,218 @@ export default function StudentResourcesPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSubject, setActiveSubject] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
     async function loadData() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return router.push('/');
-
-        // Fetch User Profile for the Sidebar
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .maybeSingle();
-        if (profile) setUser(profile);
-
-        const { data } = await supabase
-          .from('resources')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (data) setResources(data);
-      } catch (err) {
-        console.error("Error loading resources", err);
-      } finally {
-        setLoading(false);
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return router.push('/');
+      const { data } = await supabase.from('resources').select('*').order('created_at', { ascending: false });
+      if (data) setResources(data);
+      setLoading(false);
     }
     loadData();
   }, [router]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/';
-  };
 
   const getResourceCount = (subjectId: string) => resources.filter(r => r.category === subjectId).length;
 
   const filteredResources = resources.filter(r => {
     if (!activeSubject) return false;
-    const matchesSubject = r.category === activeSubject;
-    const matchesSearch = r.title.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSubject && matchesSearch;
+    return r.category === activeSubject && r.title.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
-  // GROUP RESOURCES BY SUBSECTION
   const groupedResources = filteredResources.reduce((acc, resource) => {
-    const subsection = resource.section && resource.section !== resource.category ? resource.section : 'General Materials';
-    if (!acc[subsection]) acc[subsection] = [];
-    acc[subsection].push(resource);
+    const sub = resource.section && resource.section !== resource.category ? resource.section : 'General Materials';
+    if (!acc[sub]) acc[sub] = [];
+    acc[sub].push(resource);
     return acc;
   }, {} as Record<string, Resource[]>);
 
+  const activeConfig = SUBJECT_CONFIG.find(s => s.id === activeSubject);
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#020617]">
-        <Loader2 className="w-10 h-10 animate-spin text-emerald-400" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#F1F5F9' }}>
+        <div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: '#6366F1', borderTopColor: 'transparent' }} />
       </div>
     );
   }
 
+  const getFileMeta = (type: string) => {
+    if (type === 'pdf') return { icon: Download, iconBg: '#FEF2F2', iconColor: '#DC2626', label: 'PDF' };
+    if (type === 'image') return { icon: FileText, iconBg: '#F5F3FF', iconColor: '#7C3AED', label: 'Image' };
+    return { icon: ExternalLink, iconBg: '#EFF6FF', iconColor: '#2563EB', label: 'Link' };
+  };
+
   return (
-    <div className="min-h-screen bg-[#020617] relative overflow-hidden flex selection:bg-emerald-500/30">
-      
-      {/* 1. GLOWING AURORA BACKGROUND */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-emerald-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[35rem] h-[35rem] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="absolute top-[30%] left-[20%] w-[25rem] h-[25rem] bg-purple-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+    <div style={{ minHeight: '100vh', background: '#F1F5F9' }}>
 
-      {/* 2. DESKTOP GLASS SIDEBAR */}
-      <aside className="hidden md:flex w-72 h-screen flex-col bg-white/[0.02] border-r border-white/10 backdrop-blur-2xl relative z-20 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
-        <div className="p-8 pb-6">
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-3 font-serif">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 border border-white/20">
-              <Sparkles className="w-5 h-5 text-white" />
+      {/* Top nav */}
+      <header style={{ background: 'white', borderBottom: '1px solid #E2E8F0' }}>
+        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: '#6366F1' }}>
+              <BookOpen className="w-4 h-4 text-white" />
             </div>
-            Gyankunj
-          </h1>
-        </div>
-
-        <nav className="flex-1 px-5 py-4 space-y-3">
-          <button onClick={() => router.push('/dashboard')} className="w-full flex items-center gap-4 px-4 py-4 text-white/50 hover:bg-white/5 hover:text-white rounded-2xl font-bold transition-all group">
-            <LayoutDashboard className="w-5 h-5 group-hover:text-emerald-300 transition-colors" /> Dashboard
-          </button>
-          
-          <button onClick={() => router.push('/quizzes')} className="w-full flex items-center gap-4 px-4 py-4 text-white/50 hover:bg-white/5 hover:text-white rounded-2xl font-bold transition-all group">
-            <Layers className="w-5 h-5 group-hover:text-emerald-300 transition-colors" /> Mock Tests
-          </button>
-          
-          {/* Active Tab */}
-          <button className="w-full flex items-center gap-4 px-4 py-4 bg-white/10 text-emerald-300 border border-white/10 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.15)] font-bold transition-all">
-            <FileText className="w-5 h-5" /> Study Files
-          </button>
-          
-          <button onClick={() => router.push('/history')} className="w-full flex items-center gap-4 px-4 py-4 text-white/50 hover:bg-white/5 hover:text-white rounded-2xl font-bold transition-all group">
-            <History className="w-5 h-5 group-hover:text-emerald-300 transition-colors" /> My Results
-          </button>
-        </nav>
-
-        <div className="p-5 border-t border-white/10">
-          <div className="flex items-center gap-3 px-4 py-3 bg-white/5 rounded-2xl border border-white/5 mb-4 backdrop-blur-md">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold shadow-inner border border-white/20">
-              {user?.name?.charAt(0).toUpperCase() || 'S'}
-            </div>
-            <div className="overflow-hidden">
-              <p className="text-sm font-bold text-white truncate drop-shadow-sm">{user?.name || 'Student'}</p>
-              <p className="text-[10px] uppercase tracking-wider font-bold text-emerald-400 truncate">Pro Member</p>
-            </div>
+            <span className="text-sm font-bold" style={{ color: '#0F172A' }}>CivilPrep</span>
           </div>
-          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 rounded-xl transition-colors font-bold border border-rose-500/20">
-            <LogOut className="w-4 h-4" /> Sign Out
+          <nav className="hidden sm:flex items-center gap-1">
+            {[
+              { label: 'Dashboard', path: '/dashboard', active: false },
+              { label: 'Mock Tests', path: '/quizzes', active: false },
+              { label: 'Resources', path: '/resources', active: true },
+            ].map(({ label, path, active }) => (
+              <button key={path} onClick={() => router.push(path)}
+                className="px-3 py-1.5 rounded text-sm font-medium transition-colors"
+                style={{ background: active ? '#EEF2FF' : 'transparent', color: active ? '#6366F1' : '#64748B' }}>
+                {label}
+              </button>
+            ))}
+          </nav>
+          <button onClick={() => router.push('/dashboard')}
+            className="btn btn-secondary btn-sm flex items-center gap-1.5">
+            <ChevronLeft className="w-3.5 h-3.5" /> Back
           </button>
         </div>
-      </aside>
+      </header>
 
-      {/* 3. MOBILE FLOATING GLASS DOCK */}
-      <nav className="md:hidden fixed bottom-6 left-4 right-4 bg-white/10 backdrop-blur-3xl border border-white/20 rounded-3xl z-50 flex justify-between px-2 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
-        <button onClick={() => router.push('/dashboard')} className="flex flex-col items-center p-2 text-white/50 hover:text-white transition-colors">
-          <LayoutDashboard className="w-6 h-6 mb-1" />
-          <span className="text-[10px] font-bold">Home</span>
-        </button>
-        <button onClick={() => router.push('/quizzes')} className="flex flex-col items-center p-2 text-white/50 hover:text-white transition-colors">
-          <Layers className="w-6 h-6 mb-1" />
-          <span className="text-[10px] font-bold">Tests</span>
-        </button>
-        <button className="flex flex-col items-center p-2 text-emerald-300 relative">
-          <div className="absolute inset-0 bg-white/10 rounded-xl"></div>
-          <FileText className="w-6 h-6 mb-1 relative z-10" />
-          <span className="text-[10px] font-bold relative z-10">Files</span>
-        </button>
-        <button onClick={() => router.push('/history')} className="flex flex-col items-center p-2 text-white/50 hover:text-white transition-colors">
-          <History className="w-6 h-6 mb-1" />
-          <span className="text-[10px] font-bold">History</span>
-        </button>
-      </nav>
+      <main className="max-w-5xl mx-auto px-4 py-8 pb-20 animate-fade-in">
 
-      {/* 4. MAIN CONTENT AREA */}
-      <main className="flex-1 h-screen overflow-y-auto relative z-10">
-        <div className="max-w-5xl mx-auto p-5 md:p-8 pb-32 space-y-8 animate-fade-in text-white">
-          
-          {/* Header */}
-          <div className="flex items-center gap-4 mt-4 md:mt-0">
-            <button 
-              onClick={() => activeSubject ? setActiveSubject(null) : router.push('/dashboard')}
-              className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-colors shadow-lg border border-white/10 backdrop-blur-md"
-            >
-              <ChevronLeft className="w-6 h-6 text-white" />
-            </button>
-            <div>
-              <h1 className="text-3xl md:text-4xl font-black text-white/90 drop-shadow-sm flex items-center gap-3 font-serif tracking-tight">
-                {activeSubject ? `${activeSubject} Library` : 'Study Materials'}
-              </h1>
-              <p className="text-sm md:text-base text-emerald-100/70 font-medium mt-1">
-                {activeSubject ? 'Browse documents and links' : 'Choose a subject to view available materials'}
-              </p>
-            </div>
-          </div>
-
-          {/* VIEW 1: MAIN SUBJECT FOLDERS */}
-          {!activeSubject && (
-            <div className="animate-fade-in space-y-10">
-              <section>
-                <h2 className="text-lg font-bold text-white/80 mb-6 px-2 flex items-center gap-2 uppercase tracking-widest text-sm">
-                  <FolderOpen className="w-5 h-5 text-emerald-400" /> Subject Folders
-                </h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-                  {SUBJECT_CONFIG.map((subject) => {
-                    const Icon = subject.icon;
-                    const count = getResourceCount(subject.id);
-                    return (
-                      <div 
-                        key={subject.id}
-                        onClick={() => setActiveSubject(subject.id)}
-                        className={`bg-white/10 backdrop-blur-2xl p-6 rounded-[2rem] cursor-pointer hover:-translate-y-2 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] transition-all group border border-white/20 border-b-4 ${subject.border}`}
-                      >
-                        <div className="flex justify-between items-start mb-6">
-                          <div className={`p-4 rounded-2xl ${subject.bg} ${subject.color} group-hover:scale-110 transition-transform shadow-inner border border-white/10`}>
-                            <Icon className="w-7 h-7" />
-                          </div>
-                        </div>
-                        <div>
-                          <h3 className="text-xl font-bold text-white mb-1 group-hover:text-emerald-300 transition-colors tracking-tight">
-                            {subject.id}
-                          </h3>
-                          <span className="text-[11px] font-bold text-white/50 uppercase tracking-[0.2em]">
-                            {count} Files
-                          </span>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </section>
-            </div>
-          )}
-
-          {/* VIEW 2: SUBSECTIONS & RESOURCES */}
+        {/* Page header */}
+        <div className="mb-8">
           {activeSubject && (
-            <div className="animate-fade-in space-y-8">
-              
-              {/* Search Bar */}
-              <div className="relative">
-                <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-white/50" />
-                <input 
-                  type="text" 
-                  placeholder={`Search ${activeSubject} materials...`} 
-                  className="w-full pl-14 pr-6 py-5 bg-white/10 backdrop-blur-xl border border-white/20 text-white placeholder-white/50 rounded-[2rem] focus:outline-none focus:ring-2 focus:ring-emerald-500/50 shadow-lg text-lg"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
+            <button
+              onClick={() => setActiveSubject(null)}
+              className="flex items-center gap-1 text-sm font-medium mb-3 transition-colors"
+              style={{ color: '#64748B' }}
+            >
+              <ChevronLeft className="w-4 h-4" /> All subjects
+            </button>
+          )}
+          <h1 className="text-2xl font-bold" style={{ color: '#0F172A' }}>
+            {activeSubject ? `${activeSubject} Library` : 'Study Materials'}
+          </h1>
+          <p className="text-sm mt-1" style={{ color: '#64748B' }}>
+            {activeSubject ? 'Browse documents and links' : 'Choose a subject to view available materials'}
+          </p>
+        </div>
 
-              <div className="flex flex-col gap-8">
-                {Object.keys(groupedResources).length === 0 ? (
-                  <div className="bg-white/5 backdrop-blur-xl p-12 text-center border-dashed border-2 border-white/20 rounded-[2rem]">
-                    <FileText className="w-12 h-12 text-white/30 mx-auto mb-4" />
-                    <h3 className="text-lg font-bold text-white mb-1">No materials found</h3>
-                    <p className="text-sm text-white/50">Check back soon for new {activeSubject} resources.</p>
+        {/* VIEW 1: Subject folders */}
+        {!activeSubject && (
+          <div className="space-y-8">
+            {['GS', 'Other'].map(group => {
+              const subjects = SUBJECT_CONFIG.filter(s => s.group === group);
+              return (
+                <section key={group}>
+                  <h2 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2" style={{ color: '#94A3B8' }}>
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    {group === 'GS' ? 'General Studies' : 'Other Sections'}
+                  </h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {subjects.map(({ id, icon: Icon, iconBg, iconColor, accent }) => {
+                      const count = getResourceCount(id);
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => setActiveSubject(id)}
+                          className="panel p-4 text-left transition-all hover:shadow-md hover:-translate-y-0.5"
+                          style={{ borderBottom: `3px solid ${accent}` }}
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: iconBg }}>
+                              <Icon className="w-5 h-5" style={{ color: iconColor }} />
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#F1F5F9', color: '#64748B' }}>
+                              {count}
+                            </span>
+                          </div>
+                          <p className="text-sm font-semibold" style={{ color: '#0F172A' }}>{id}</p>
+                        </button>
+                      );
+                    })}
                   </div>
-                ) : (
-                  Object.entries(groupedResources).map(([subsection, sectionResources]) => (
-                    <div key={subsection} className="space-y-5">
-                      
-                      {/* Subsection Header */}
-                      <h2 className="text-xl font-black text-white/90 flex items-center gap-3 border-b border-white/10 pb-3">
-                        <Layers className="w-6 h-6 text-emerald-400" /> {subsection}
-                      </h2>
-                      
-                      {/* Resource Cards */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {sectionResources.map((resource) => (
-                          <div key={resource.id} className="bg-white/10 backdrop-blur-xl rounded-[2rem] p-6 border border-white/20 shadow-lg flex items-center justify-between gap-4 hover:bg-white/15 transition-all group">
-                            
-                            <div className="flex items-center gap-4 overflow-hidden">
-                              <div className={`p-4 rounded-2xl shrink-0 shadow-inner border border-white/10 ${
-                                resource.file_type === 'pdf' ? 'bg-rose-500/20 text-rose-400' : 'bg-indigo-500/20 text-indigo-400'
-                              }`}>
-                                {resource.file_type === 'pdf' ? <FileText className="w-6 h-6" /> : <ExternalLink className="w-6 h-6" />}
+                </section>
+              );
+            })}
+          </div>
+        )}
+
+        {/* VIEW 2: Resources in subject */}
+        {activeSubject && (
+          <div>
+            {/* Search */}
+            <div className="search-wrap mb-6">
+              <Search className="search-icon w-4 h-4" />
+              <input
+                type="text"
+                placeholder={`Search ${activeSubject} materials…`}
+                className="form-input"
+                style={{ paddingLeft: '2.25rem', paddingTop: '0.625rem', paddingBottom: '0.625rem' }}
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {Object.keys(groupedResources).length === 0 ? (
+              <div className="panel p-12 text-center" style={{ borderStyle: 'dashed' }}>
+                <FileText className="w-8 h-8 mx-auto mb-3" style={{ color: '#CBD5E1' }} />
+                <p className="text-sm font-medium" style={{ color: '#94A3B8' }}>No materials found for {activeSubject}</p>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {Object.entries(groupedResources).map(([subsection, sectionResources]) => (
+                  <div key={subsection}>
+                    <div className="flex items-center gap-2 mb-4 pb-2" style={{ borderBottom: '1px solid #E2E8F0' }}>
+                      <Layers className="w-4 h-4" style={{ color: activeConfig?.iconColor || '#6366F1' }} />
+                      <h2 className="text-sm font-bold" style={{ color: '#0F172A' }}>{subsection}</h2>
+                      <span className="text-xs" style={{ color: '#94A3B8' }}>{sectionResources.length} files</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {sectionResources.map(resource => {
+                        const { icon: FileIcon, iconBg, iconColor, label } = getFileMeta(resource.file_type);
+                        return (
+                          <div
+                            key={resource.id}
+                            className="panel p-4 flex items-center justify-between gap-3 transition-shadow hover:shadow-md"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: iconBg }}>
+                                <FileIcon className="w-4 h-4" style={{ color: iconColor }} />
                               </div>
-                              <div className="overflow-hidden">
-                                <h3 className="text-lg font-bold text-white mb-1 group-hover:text-emerald-300 transition-colors truncate">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold line-clamp-1" style={{ color: '#0F172A' }}>
                                   {resource.title}
-                                </h3>
-                                <span className="text-[10px] font-bold text-white/50 uppercase tracking-[0.2em] bg-white/5 px-2 py-1 rounded-md border border-white/10">
-                                  {(resource.file_type || 'LINK').toUpperCase()}
+                                </p>
+                                <span
+                                  className="text-[10px] font-bold uppercase tracking-wider"
+                                  style={{ color: iconColor }}
+                                >
+                                  {label}
                                 </span>
                               </div>
                             </div>
-
-                            <a 
+                            <a
                               href={resource.file_url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="shrink-0 p-4 bg-white/10 hover:bg-emerald-500 text-white rounded-2xl transition-all shadow-md border border-white/10 group-hover:scale-105 group-hover:shadow-[0_0_20px_rgba(16,185,129,0.4)]"
+                              className="btn btn-secondary btn-sm btn-icon shrink-0"
+                              title={resource.file_type === 'pdf' ? 'Download' : 'Open link'}
                             >
-                              {resource.file_type === 'pdf' ? <Download className="w-5 h-5" /> : <ExternalLink className="w-5 h-5" />}
+                              {resource.file_type === 'pdf'
+                                ? <Download className="w-3.5 h-3.5" />
+                                : <ExternalLink className="w-3.5 h-3.5" />
+                              }
                             </a>
-
                           </div>
-                        ))}
-                      </div>
-
+                        );
+                      })}
                     </div>
-                  ))
-                )}
+                  </div>
+                ))}
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

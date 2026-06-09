@@ -1,15 +1,15 @@
 'use client';
- 
+
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import { Loader2, BookOpen, Target, Users, Zap } from 'lucide-react';
- 
+
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
- 
+
   useEffect(() => {
     const checkUserRoleAndRedirect = async (session: any) => {
       if (session.user.email === 'kshitiz2007@gmail.com' || session.user.email === 'admin@civilprep.in') {
@@ -21,14 +21,14 @@ export default function LoginPage() {
         .select('role')
         .eq('id', session.user.id)
         .single();
- 
+
       if (data?.role === 'admin') {
         router.push('/admin');
       } else {
         router.push('/dashboard');
       }
     };
- 
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         checkUserRoleAndRedirect(session);
@@ -36,18 +36,18 @@ export default function LoginPage() {
         setCheckingAuth(false);
       }
     });
- 
+
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
         checkUserRoleAndRedirect(session);
       }
     });
- 
+
     return () => {
       authListener.subscription.unsubscribe();
     };
   }, [router]);
- 
+
   const handleGoogleLogin = async () => {
     setLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
@@ -59,7 +59,7 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
- 
+
   if (checkingAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: '#F1F5F9' }}>
@@ -67,17 +67,17 @@ export default function LoginPage() {
       </div>
     );
   }
- 
+
   const features = [
     { icon: Target, label: 'AI-powered mock tests', desc: 'Auto-generated MCQs for every subject' },
     { icon: BookOpen, label: 'Curated study resources', desc: 'PDFs, notes & current affairs' },
     { icon: Users, label: 'Progress tracking', desc: 'Leaderboards & detailed analytics' },
     { icon: Zap, label: 'Instant results', desc: 'Score breakdowns after every test' },
   ];
- 
+
   return (
     <div className="min-h-screen flex" style={{ background: '#F1F5F9' }}>
- 
+
       {/* ── Left panel: brand & features ── */}
       <div
         className="hidden lg:flex flex-col justify-between p-12 w-[520px] shrink-0"
@@ -96,7 +96,7 @@ export default function LoginPage() {
             <div className="text-xs" style={{ color: '#64748B' }}>by Gyankunj Academy</div>
           </div>
         </div>
- 
+
         {/* Headline */}
         <div>
           <div
@@ -111,7 +111,7 @@ export default function LoginPage() {
           <p className="text-sm leading-relaxed" style={{ color: '#64748B' }}>
             From AI-generated mock tests to curated study material — everything a serious civil services aspirant needs, in one place.
           </p>
- 
+
           <div className="mt-10 space-y-4">
             {features.map(({ icon: Icon, label, desc }) => (
               <div key={label} className="flex items-start gap-3">
@@ -129,16 +129,16 @@ export default function LoginPage() {
             ))}
           </div>
         </div>
- 
+
         <p className="text-xs" style={{ color: '#334155' }}>
           © 2025 Gyankunj Academy, Betul, Madhya Pradesh
         </p>
       </div>
- 
+
       {/* ── Right panel: login form ── */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
- 
+
           {/* Mobile logo */}
           <div className="flex items-center gap-2 mb-10 lg:hidden">
             <div
@@ -149,12 +149,12 @@ export default function LoginPage() {
             </div>
             <span className="font-bold text-sm" style={{ color: '#0F172A' }}>CivilPrep · Gyankunj Academy</span>
           </div>
- 
+
           <h2 className="text-2xl font-bold mb-1" style={{ color: '#0F172A' }}>Sign in</h2>
           <p className="text-sm mb-8" style={{ color: '#64748B' }}>
             Access your study dashboard and mock tests.
           </p>
- 
+
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
@@ -182,11 +182,11 @@ export default function LoginPage() {
               </>
             )}
           </button>
- 
+
           <p className="text-center text-xs mt-6" style={{ color: '#94A3B8' }}>
             By continuing, you agree to Gyankunj Academy's Terms of Service and Privacy Policy.
           </p>
- 
+
           <div className="mt-10 pt-6" style={{ borderTop: '1px solid #E2E8F0' }}>
             <div className="flex items-center justify-center gap-4 text-xs" style={{ color: '#94A3B8' }}>
               <span>🔒 Google OAuth</span>
@@ -199,31 +199,3 @@ export default function LoginPage() {
     </div>
   );
 }
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

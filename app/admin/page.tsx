@@ -1,221 +1,210 @@
 'use client';
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-
-import AdminOverview from './AdminOverview';
-import AdminInbox from './AdminInbox';
-import AiQuizBuilder from './AiQuizBuilder';
-import ResourceManager from './ResourceManager';
-import CsvImporter from './CsvImporter';
-import PaymentsManager from './PaymentsManager';
-import StudentsManager from './StudentsManager';
-import QuizManager from './QuizManager';
-import CurrentAffairsManager from './CurrentAffairsManager'; // Imported the new manager component
-
+import { useRouter } from 'next/navigation';
 import {
-  LayoutDashboard,
-  FileQuestion,
-  Users,
-  FileText,
-  CreditCard,
-  Sparkles,
-  CalendarClock,
-  TableProperties,
-  LogOut,
-  MessageSquare,
-  Bell,
-  Search,
-  Settings,
-  Newspaper
+  LayoutDashboard, FileQuestion, Users, FileText,
+  CreditCard, Sparkles, CalendarClock, TableProperties,
+  LogOut, BookOpen, ChevronRight
 } from 'lucide-react';
 
-const ADMIN_TABS = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'inbox', label: 'Inbox', icon: MessageSquare },
-  { id: 'quizzes', label: 'Quizzes', icon: FileQuestion },
-  { id: 'aigen', label: 'AI Generate', icon: Sparkles },
-  { id: 'currentaffairs', label: 'Current Affairs', icon: Newspaper }, // Connected tab view icon link
-  { id: 'resources', label: 'Resources', icon: FileText },
-  { id: 'students', label: 'Students', icon: Users },
-  { id: 'payments', label: 'Payments', icon: CreditCard },
-  { id: 'scheduled', label: 'Scheduled', icon: CalendarClock },
-  { id: 'csvimport', label: 'CSV Import', icon: TableProperties },
+import AdminOverview   from './AdminOverview';
+import AiQuizBuilder   from './AiQuizBuilder';
+import ResourceManager from './ResourceManager';
+import CsvImporter     from './CsvImporter';
+import PaymentsManager from './PaymentsManager';
+import StudentsManager from './StudentsManager';
+import QuizManager     from './QuizManager';
+
+const NAV = [
+  { id: 'overview',   label: 'Overview',    icon: LayoutDashboard, group: 'platform' },
+  { id: 'students',   label: 'Students',    icon: Users,           group: 'platform' },
+  { id: 'quizzes',    label: 'Quizzes',     icon: FileQuestion,    group: 'platform' },
+  { id: 'payments',   label: 'Payments',    icon: CreditCard,      group: 'platform' },
+  { id: 'resources',  label: 'Resources',   icon: FileText,        group: 'content'  },
+  { id: 'aigen',      label: 'AI Builder',  icon: Sparkles,        group: 'content'  },
+  { id: 'csvimport',  label: 'CSV Import',  icon: TableProperties, group: 'content'  },
+  { id: 'scheduled',  label: 'Scheduled',   icon: CalendarClock,   group: 'content'  },
 ];
 
 export default function AdminPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
+  const [adminName, setAdminName] = useState('Admin');
+  const [adminEmail, setAdminEmail] = useState('');
 
   useEffect(() => {
     async function checkAdmin() {
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { router.push('/'); return; }
 
-        if (sessionError || !session) {
-          window.location.href = '/';
-          return;
-        }
+      // Populate user info for sidebar footer
+      setAdminEmail(session.user.email || '');
+      setAdminName(session.user.user_metadata?.full_name?.split(' ')[0] || 'Admin');
 
-        const email = session.user.email || '';
-
-        if (
-          email === 'kshitiz2007@gmail.com' ||
-          email === 'admin@civilprep.in'
-        ) {
-          setLoading(false);
-          return;
-        }
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profile?.role !== 'admin') {
-          window.location.href = '/dashboard';
-          return;
-        }
-
-        setLoading(false);
-      } catch {
-        window.location.href = '/dashboard';
+      if (session.user.email === 'kshitiz2007@gmail.com' || session.user.email === 'admin@civilprep.in') {
+        setLoading(false); return;
       }
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+      if (profile?.role !== 'admin') { router.push('/dashboard'); }
+      else { setLoading(false); }
     }
-
     checkAdmin();
-  }, []);
+  }, [router]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    window.location.href = '/';
+    router.push('/');
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#020617]">
-        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#F1F5F9' }}>
+        <div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: '#6366F1', borderTopColor: 'transparent' }} />
       </div>
     );
   }
 
+  const currentNav = NAV.find(n => n.id === activeTab);
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'overview':  return <AdminOverview />;
+      case 'students':  return <StudentsManager />;
+      case 'quizzes':   return <QuizManager />;
+      case 'payments':  return <PaymentsManager />;
+      case 'resources': return <ResourceManager />;
+      case 'aigen':     return <AiQuizBuilder />;
+      case 'csvimport': return <CsvImporter />;
+      case 'scheduled': return <ScheduledPlaceholder />;
+      default:          return <AdminOverview />;
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#020617] relative overflow-hidden flex flex-col md:flex-row w-full text-white">
+    <div className="flex h-screen overflow-hidden" style={{ background: '#F1F5F9' }}>
 
-      {/* AMBIEBT BACKGROUND LIGHTING BLOBS */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-emerald-600/20 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[35rem] h-[35rem] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute top-[30%] left-[20%] w-[25rem] h-[25rem] bg-purple-500/10 rounded-full blur-[100px] pointer-events-none" />
-
-      {/* DASHBOARD SIDEBAR */}
-      <aside className="w-full md:w-72 md:h-screen bg-white/[0.03] border-r border-white/10 backdrop-blur-2xl relative z-20 flex flex-col">
-
-        <div className="p-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-white" />
+      {/* ── Sidebar ── */}
+      <aside
+        className="sidebar-texture flex flex-col shrink-0 h-full border-r"
+        style={{ width: 220, borderColor: '#1E293B' }}
+      >
+        {/* Logo */}
+        <div className="px-4 py-5 border-b" style={{ borderColor: '#1E293B' }}>
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: 'rgba(99,102,241,0.25)', border: '1px solid rgba(99,102,241,0.4)' }}
+            >
+              <BookOpen className="w-4 h-4" style={{ color: '#A5B4FC' }} />
             </div>
             <div>
-              <h1 className="font-black text-xl">CivilPrep</h1>
-              <p className="text-xs text-emerald-400">Smart UPSC Platform</p>
+              <div className="text-sm font-bold text-white leading-tight">CivilPrep</div>
+              <div className="text-[10px]" style={{ color: '#475569' }}>Admin Console</div>
             </div>
           </div>
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 overflow-y-auto scrollbar-none pb-4">
-          {ADMIN_TABS.map((tab) => {
-            const Icon = tab.icon;
-            const active = activeTab === tab.id;
-
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all text-sm font-medium ${
-                  active
-                    ? 'bg-gradient-to-r from-emerald-500/20 to-cyan-500/10 border-white/20 text-white shadow-[0_0_30px_rgba(16,185,129,0.25)]'
-                    : 'text-white/60 border-transparent hover:bg-white/5 hover:text-white'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                {tab.label}
-              </button>
-            );
-          })}
+        {/* Nav groups */}
+        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
+          {['platform', 'content'].map(group => (
+            <div key={group}>
+              <div className="px-2 mb-1 text-[9px] font-bold uppercase tracking-widest" style={{ color: '#334155' }}>
+                {group === 'platform' ? 'Platform' : 'Content'}
+              </div>
+              {NAV.filter(n => n.group === group).map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => setActiveTab(id)}
+                  className={`nav-item w-full text-left ${activeTab === id ? 'active' : ''}`}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          ))}
         </nav>
 
-        <div className="p-4 border-t border-white/10">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm font-semibold transition-colors hover:bg-rose-500/20"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </button>
+        {/* User footer */}
+        <div className="border-t p-3" style={{ borderColor: '#1E293B' }}>
+          <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
+            <div
+              className="avatar w-7 h-7 text-xs shrink-0"
+              style={{ background: '#6366F1', color: 'white' }}
+            >
+              {adminName.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <div className="text-xs font-semibold text-white truncate">{adminName}</div>
+              <div className="text-[10px] truncate" style={{ color: '#475569' }}>{adminEmail}</div>
+            </div>
+            <button
+              onClick={handleLogout}
+              title="Sign out"
+              className="shrink-0 p-1 rounded transition-colors"
+              style={{ color: '#475569' }}
+              onMouseEnter={e => e.currentTarget.style.color = '#94A3B8'}
+              onMouseLeave={e => e.currentTarget.style.color = '#475569'}
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </aside>
 
-      {/* MAIN VIEW CONTENT CONTAINER */}
-      <main className="flex-1 h-screen overflow-y-auto p-4 md:p-8 relative z-10">
-        <div className="max-w-[1600px] mx-auto">
+      {/* ── Main area ── */}
+      <div className="flex-1 flex flex-col overflow-hidden">
 
-          {/* TOP HEADER TOOLBAR STATUS BAR */}
-          <div className="sticky top-0 z-30 mb-8">
-            <div className="bg-white/[0.04] backdrop-blur-2xl border border-white/10 rounded-3xl px-6 py-4 flex flex-col md:flex-row gap-4 md:justify-between md:items-center">
-
-              <div className="relative flex-1 max-w-xl">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-                <input
-                  placeholder="Search students, quizzes, resources..."
-                  className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white/5 border border-white/10 outline-none focus:border-emerald-500/50 transition-colors text-sm text-white placeholder:text-white/30"
-                />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button className="relative h-12 w-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
-                  <Bell className="w-5 h-5" />
-                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-400" />
-                </button>
-
-                <button className="h-12 w-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
-                  <Settings className="w-5 h-5" />
-                </button>
-
-                <div className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-white/5 border border-white/10">
-                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500" />
-                  <div>
-                    <div className="font-semibold text-sm">Admin</div>
-                    <div className="text-xs text-white/50">CivilPrep</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+        {/* Topbar */}
+        <header
+          className="h-12 flex items-center justify-between px-6 border-b shrink-0"
+          style={{ background: 'white', borderColor: '#E2E8F0' }}
+        >
+          <div className="flex items-center gap-2 text-sm" style={{ color: '#94A3B8' }}>
+            <span>Admin</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+            <span style={{ color: '#0F172A', fontWeight: 600 }}>{currentNav?.label}</span>
           </div>
+          <div
+            className="text-xs font-medium px-2 py-1 rounded"
+            style={{ background: '#F1F5F9', color: '#64748B' }}
+          >
+            Gyankunj Academy · Betul
+          </div>
+        </header>
 
-          {/* VIEW SWITCHER LOGIC CONDITIONALS */}
-          {activeTab === 'overview' && <AdminOverview setActiveTab={setActiveTab} />}
-          {activeTab === 'inbox' && <AdminInbox />}
-          {activeTab === 'quizzes' && <QuizManager />}
-          {activeTab === 'aigen' && <AiQuizBuilder />}
-          {activeTab === 'currentaffairs' && <CurrentAffairsManager />}
-          {activeTab === 'resources' && <ResourceManager />}
-          {activeTab === 'students' && <StudentsManager />}
-          {activeTab === 'payments' && <PaymentsManager />}
-          {activeTab === 'csvimport' && <CsvImporter />}
+        {/* Scrollable content */}
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-6xl mx-auto animate-fade-in">
+            {renderContent()}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
 
-          {activeTab === 'scheduled' && (
-            <div className="bg-white/5 backdrop-blur-2xl p-12 rounded-[2rem] border border-white/10 text-center">
-              <CalendarClock className="w-16 h-16 mx-auto text-emerald-400 mb-4" />
-              <h3 className="text-2xl font-bold">Live Events Module</h3>
-              <p className="text-white/50 mt-3 text-sm">
-                Manage All India Mock Tests and scheduled events.
-              </p>
-            </div>
-          )}
-        </div>
-      </main>
+function ScheduledPlaceholder() {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-bold" style={{ color: '#0F172A' }}>Scheduled Events</h1>
+        <p className="text-sm mt-0.5" style={{ color: '#64748B' }}>Manage live, time-gated All India Mock Tests.</p>
+      </div>
+      <div
+        className="panel p-16 flex flex-col items-center justify-center text-center"
+        style={{ borderStyle: 'dashed' }}
+      >
+        <CalendarClock className="w-10 h-10 mb-4" style={{ color: '#CBD5E1' }} />
+        <h3 className="text-sm font-semibold mb-1" style={{ color: '#475569' }}>Live Events Module</h3>
+        <p className="text-xs max-w-xs" style={{ color: '#94A3B8' }}>
+          This module will handle the logic for setting up live, time-gated "All India Mock Tests". Coming soon.
+        </p>
+      </div>
     </div>
   );
 }

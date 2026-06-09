@@ -1,10 +1,18 @@
 'use client';
-export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import { Clock, ChevronRight, ChevronLeft, CheckCircle2, Languages, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
+import { useRouter, useParams } from 'next/navigation';
+import { Clock, ChevronRight, ChevronLeft, CheckCircle2, Languages, BookOpen } from 'lucide-react';
+
+interface Question {
+  id: string; text: string; textHi?: string;
+  options: string[]; optionsHi?: string[]; correct: number;
+}
+interface Quiz {
+  id: string; title: string; titleHi?: string;
+  category: string; time_limit: number; questions: Question[];
+}
 
 export default function QuizPlayerPage() {
   const router = useRouter();
@@ -12,7 +20,7 @@ export default function QuizPlayerPage() {
   const quizId = params.id as string;
 
   const [user, setUser] = useState<any>(null);
-  const [quiz, setQuiz] = useState<any>(null);
+  const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -21,58 +29,32 @@ export default function QuizPlayerPage() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [lang, setLang] = useState<'en' | 'hi'>('en');
 
-  // SAFE INITIALIZATION
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
     async function initQuiz() {
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !session) {
-          window.location.href = '/';
-          return;
-        }
-        
-        const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-        setUser(profile);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { router.push('/'); return; }
 
-        const { data: quizData, error } = await supabase.from('quizzes').select('*').eq('id', quizId).single();
+      const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+      setUser(profile);
 
-        if (error || !quizData) {
-          alert('Quiz not found!');
-          window.location.href = '/dashboard';
-          return;
-        }
+      const { data: quizData, error } = await supabase.from('quizzes').select('*').eq('id', quizId).single();
+      if (error || !quizData) { alert('Quiz not found!'); router.push('/dashboard'); return; }
 
-        setQuiz(quizData);
-        setTimeLeft(quizData.time_limit * 60);
-        setLoading(false);
-
-      } catch (err) {
-        console.error("Critical Quiz Load Error:", err);
-        alert("Failed to load the quiz. Redirecting to dashboard.");
-        window.location.href = '/dashboard';
-      }
+      setQuiz(quizData as Quiz);
+      setTimeLeft(quizData.time_limit * 60);
+      setLoading(false);
     }
-
     initQuiz();
-  }, [quizId]);
+  }, [quizId, router]);
 
-  // TIMER LOGIC
   useEffect(() => {
     if (timeLeft <= 0 || loading || submitting) return;
-    
     const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          handleSubmit();
-          return 0;
-        }
+      setTimeLeft(prev => {
+        if (prev <= 1) { clearInterval(timer); handleSubmit(); return 0; }
         return prev - 1;
       });
     }, 1000);
-
     return () => clearInterval(timer);
   }, [timeLeft, loading, submitting]);
 
@@ -86,217 +68,245 @@ export default function QuizPlayerPage() {
     if (!quiz || !user) return;
     setSubmitting(true);
 
-    try {
-      let correctCount = 0;
-      let wrongCount = 0;
-      let skippedCount = 0;
+    let correct = 0, wrong = 0, skipped = 0;
+    const total = quiz.questions.length;
 
-      const detailedResponses = quiz.questions.map((q: any) => {
-        const selectedIndex = answers[q.id];
-        const isCorrect = selectedIndex === q.correct;
-        
-        if (selectedIndex === undefined) {
-          skippedCount++;
-        } else if (isCorrect) {
-          correctCount++;
-        } else {
-          wrongCount++;
-        }
-        
-        return {
-          question: q.text,
-          selected_answer: selectedIndex !== undefined ? q.options[selectedIndex] : 'Skipped',
-          correct_answer: q.options[q.correct],
-          isCorrect: isCorrect,
-          explanation: q.explanation || null
-        };
-      });
+    const details = quiz.questions.map(q => {
+      const ans = answers[q.id];
+      let status = 'skipped';
+      if (ans === undefined) { skipped++; }
+      else if (ans === q.correct) { correct++; status = 'correct'; }
+      else { wrong++; status = 'wrong'; }
+      return { qid: q.id, selected: ans !== undefined ? ans : null, correct: q.correct, status };
+    });
 
-      const totalQuestions = quiz.questions.length;
-      const finalScore = Math.round((correctCount / totalQuestions) * 100);
+    const score = Math.round((correct / total) * 100);
+    const attempt = {
+      id: `a_${Date.now()}`, user_id: user.id, user_name: user.name || user.email,
+      quiz_id: quiz.id, quiz_title: quiz.title, quiz_title_hi: quiz.titleHi || '',
+      category: quiz.category, score, correct, wrong, skipped, total, details,
+      completed_at: new Date().toISOString()
+    };
 
-      const attempt = {
-        id: `a_${Date.now()}`,
-        user_id: user.id,
-        user_name: user.name || user.email || 'Student',
-        quiz_id: quiz.id,
-        quiz_title: quiz.title,
-        quiz_title_hi: quiz.titleHi || '',
-        category: quiz.category || 'UPSC',
-        score: finalScore,
-        correct: correctCount,
-        wrong: wrongCount,
-        skipped: skippedCount,
-        total: totalQuestions,
-        details: detailedResponses,
-        completed_at: new Date().toISOString()
-      };
+    const { error } = await supabase.from('attempts').insert([attempt]);
+    if (error) { alert('Failed to save attempt. Please try again.'); setSubmitting(false); return; }
 
-      const { error } = await supabase.from('attempts').insert([attempt]);
-      
-      if (error) {
-        alert(`Database Error: ${error.message}`);
-        console.error(error);
-        setSubmitting(false);
-        return;
-      }
-
-      window.location.href = `/quiz/${quiz.id}/result`;
-
-    } catch (err) {
-      console.error("Submission crash:", err);
-      alert("A critical error occurred while submitting.");
-      setSubmitting(false);
-    }
+    alert(`Quiz submitted! You scored ${score}%`);
+    router.push('/dashboard');
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#020617]">
-        <Loader2 className="w-10 h-10 animate-spin text-emerald-400" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#F1F5F9' }}>
+        <div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: '#6366F1', borderTopColor: 'transparent' }} />
       </div>
     );
   }
-
   if (!quiz) return null;
 
   const totalQs = quiz.questions.length;
   const q = quiz.questions[currentQ];
-  const progress = Math.round((currentQ / totalQs) * 100);
-  
+  const answeredCount = Object.keys(answers).length;
+  const progress = (currentQ / totalQs) * 100;
+
   const isHi = lang === 'hi';
   const hasHi = !!q.textHi;
   const qText = isHi && q.textHi ? q.textHi : q.text;
-  const opts = isHi && q.optionsHi && q.optionsHi.length ? q.optionsHi : q.options;
+  const opts = isHi && q.optionsHi?.length ? q.optionsHi : q.options;
 
   const m = Math.floor(timeLeft / 60);
   const s = timeLeft % 60;
   const timeString = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  const isTimeWarning = timeLeft <= 60;
+  const isWarning = timeLeft <= 60;
 
   return (
-    <div className="min-h-screen bg-[#020617] relative flex flex-col selection:bg-emerald-500/30 font-sans">
-      
-      {/* 1. GLOWING AURORA BACKGROUND */}
-      <div className="fixed top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-emerald-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="fixed bottom-[-10%] right-[-10%] w-[35rem] h-[35rem] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none"></div>
+    <div style={{ minHeight: '100vh', background: '#F1F5F9' }}>
 
-      <div className="max-w-3xl mx-auto w-full p-4 md:p-6 pb-24 flex-1 flex flex-col relative z-10">
-        
-        {/* HEADER: Progress & Timer */}
-        <div className="bg-white/5 backdrop-blur-2xl rounded-[2rem] p-6 mb-6 shadow-lg border border-white/10 animate-fade-in text-white">
-          <div className="flex justify-between items-start mb-6">
-            <div>
-              <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-[0.2em] mb-1">{quiz.category}</p>
-              <h1 className="text-xl md:text-2xl font-black text-white tracking-tight drop-shadow-sm">
-                Question {currentQ + 1} <span className="text-white/30 font-normal">of {totalQs}</span>
-              </h1>
-            </div>
-            <div className={`flex items-center gap-2 px-5 py-2.5 rounded-full border shadow-inner font-mono font-bold text-lg ${
-              isTimeWarning ? 'border-rose-500/50 text-rose-400 bg-rose-500/10 animate-pulse' : 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
-            }`}>
-              <Clock className="w-5 h-5" />
-              <span>{timeString}</span>
+      {/* Sticky quiz header */}
+      <header
+        className="sticky top-0 z-20"
+        style={{ background: 'white', borderBottom: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+      >
+        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-4">
+          {/* Logo */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: '#6366F1' }}>
+              <BookOpen className="w-4 h-4 text-white" />
             </div>
           </div>
 
-          <div className="w-full bg-white/10 rounded-full h-2 mb-3 overflow-hidden shadow-inner">
-            <div className="bg-gradient-to-r from-emerald-500 to-teal-400 h-2 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+          {/* Progress bar */}
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium" style={{ color: '#64748B' }}>
+                Question {currentQ + 1} of {totalQs}
+              </span>
+              <span className="text-xs" style={{ color: '#94A3B8' }}>
+                {answeredCount} answered
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#E2E8F0' }}>
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${progress}%`, background: '#6366F1' }}
+              />
+            </div>
           </div>
-          
-          <div className="flex justify-between text-[11px] font-bold text-white/50 uppercase tracking-widest">
-            <span>{currentQ} answered</span>
-            <span>{totalQs - currentQ} remaining</span>
+
+          {/* Timer */}
+          <div
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-sm font-bold shrink-0"
+            style={{
+              background: isWarning ? '#FEF2F2' : '#F1F5F9',
+              color: isWarning ? '#DC2626' : '#475569',
+              border: `1px solid ${isWarning ? '#FECACA' : '#E2E8F0'}`,
+            }}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            {timeString}
           </div>
         </div>
+      </header>
 
-        {/* BILINGUAL TOGGLE */}
+      <main className="max-w-2xl mx-auto px-4 py-8 pb-24">
+
+        {/* Quiz title + category */}
+        <div className="mb-6">
+          <span className="badge badge-accent">{quiz.category}</span>
+          <h1 className="text-base font-semibold mt-2" style={{ color: '#475569' }}>
+            {quiz.title}
+          </h1>
+        </div>
+
+        {/* Language toggle */}
         {hasHi && (
-          <div className="flex items-center justify-between bg-white/5 border border-white/10 p-3 rounded-2xl mb-6 backdrop-blur-md animate-fade-in shadow-sm">
-            <span className="text-sm font-bold text-white/70 flex items-center gap-2 px-2">
-              <Languages className="w-4 h-4 text-emerald-400" /> Language / भाषा
+          <div
+            className="flex items-center justify-between p-3 rounded-lg mb-5"
+            style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}
+          >
+            <span className="text-xs font-semibold flex items-center gap-2" style={{ color: '#92400E' }}>
+              <Languages className="w-3.5 h-3.5" /> Language / भाषा
             </span>
-            <div className="flex gap-2">
-              <button onClick={() => setLang('en')} className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${lang === 'en' ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'}`}>EN</button>
-              <button onClick={() => setLang('hi')} className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${lang === 'hi' ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'}`}>हिंदी</button>
+            <div className="segment">
+              <button
+                onClick={() => setLang('en')}
+                className={`segment-item ${lang === 'en' ? 'active' : ''}`}
+                style={{ fontSize: '0.75rem', padding: '0.2rem 0.625rem' }}
+              >
+                EN
+              </button>
+              <button
+                onClick={() => setLang('hi')}
+                className={`segment-item ${lang === 'hi' ? 'active' : ''}`}
+                style={{ fontSize: '0.75rem', padding: '0.2rem 0.625rem' }}
+              >
+                हिंदी
+              </button>
             </div>
           </div>
         )}
 
-        {/* QUESTION CARD */}
-        <div className="bg-white/5 backdrop-blur-2xl rounded-[2rem] p-6 md:p-8 border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] flex-1 animate-fade-in mb-6 flex flex-col">
-          <h2 className={`text-xl md:text-2xl font-bold text-white mb-8 leading-relaxed tracking-tight ${isHi ? 'font-serif' : ''}`}>
+        {/* Question */}
+        <div className="panel p-6 mb-5">
+          <p
+            className="text-base font-medium leading-relaxed mb-6"
+            style={{ color: '#0F172A', fontFamily: isHi ? 'serif' : 'inherit' }}
+          >
             {qText}
-          </h2>
-          
-          <div className="flex flex-col gap-3 mt-auto">
-            {opts.map((opt: string, i: number) => {
+          </p>
+
+          <div className="space-y-2.5">
+            {opts.map((opt, i) => {
               const isSelected = answers[q.id] === i;
               return (
-                <div 
+                <div
                   key={i}
                   onClick={() => handleSelectOption(i)}
-                  className={`group flex items-start gap-5 p-5 rounded-2xl border cursor-pointer transition-all ${
-                    isSelected 
-                      ? 'border-emerald-500/50 bg-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.2)]' 
-                      : 'border-white/10 bg-white/5 hover:border-emerald-400/30 hover:bg-white/10'
-                  }`}
+                  className="flex items-start gap-3 p-3.5 rounded-lg cursor-pointer transition-all"
+                  style={{
+                    border: `1.5px solid ${isSelected ? '#6366F1' : '#E2E8F0'}`,
+                    background: isSelected ? '#EEF2FF' : 'white',
+                  }}
+                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.borderColor = '#A5B4FC'; }}
+                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.borderColor = '#E2E8F0'; }}
                 >
-                  <div className={`w-8 h-8 shrink-0 flex items-center justify-center rounded-xl border text-sm font-bold transition-all ${
-                    isSelected 
-                      ? 'bg-emerald-500 border-emerald-400 text-white shadow-inner' 
-                      : 'border-white/20 bg-white/5 text-white/50 group-hover:border-emerald-400/50 group-hover:text-emerald-400'
-                  }`}>
+                  <div
+                    className="w-7 h-7 shrink-0 flex items-center justify-center rounded text-xs font-bold mt-0.5"
+                    style={{
+                      background: isSelected ? '#6366F1' : '#F1F5F9',
+                      color: isSelected ? 'white' : '#64748B',
+                      border: `1.5px solid ${isSelected ? '#6366F1' : '#E2E8F0'}`,
+                    }}
+                  >
                     {String.fromCharCode(65 + i)}
                   </div>
-                  <div className={`pt-1 text-base md:text-lg font-medium text-white/90 ${isHi ? 'font-serif' : ''}`}>
+                  <span
+                    className="text-sm pt-0.5"
+                    style={{
+                      color: isSelected ? '#3730A3' : '#374151',
+                      fontFamily: isHi ? 'serif' : 'inherit',
+                      fontWeight: isSelected ? 500 : 400,
+                    }}
+                  >
                     {opt}
-                  </div>
+                  </span>
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* NAVIGATION CONTROLS */}
-        <div className="flex gap-4 animate-fade-in">
+        {/* Navigation */}
+        <div className="flex gap-3">
           {currentQ > 0 && (
-            <button onClick={() => setCurrentQ(prev => prev - 1)} className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold py-4.5 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-sm">
-              <ChevronLeft className="w-5 h-5" /> Prev
+            <button
+              onClick={() => setCurrentQ(p => p - 1)}
+              className="btn btn-secondary flex items-center gap-1.5"
+              style={{ flex: 1, justifyContent: 'center', padding: '0.75rem' }}
+            >
+              <ChevronLeft className="w-4 h-4" /> Prev
             </button>
           )}
-          
+
           {currentQ < totalQs - 1 ? (
-            <button 
+            <button
               onClick={() => {
                 if (answers[q.id] === undefined) { alert('Please select an option to continue.'); return; }
-                setCurrentQ(prev => prev + 1);
+                setCurrentQ(p => p + 1);
               }}
-              className="flex-1 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 font-bold py-4.5 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+              className="btn btn-primary flex items-center gap-1.5"
+              style={{ flex: 1, justifyContent: 'center', padding: '0.75rem' }}
             >
-              Next <ChevronRight className="w-5 h-5" />
+              Next <ChevronRight className="w-4 h-4" />
             </button>
           ) : (
-            <button 
+            <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-white font-bold py-4.5 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-[0_0_30px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn btn-primary flex items-center gap-1.5"
+              style={{ flex: 1, justifyContent: 'center', padding: '0.75rem', background: '#059669' }}
             >
-              {submitting ? 'Submitting...' : 'Submit Final Quiz'} <CheckCircle2 className="w-5 h-5" />
+              {submitting
+                ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Submitting…</>
+                : <><CheckCircle2 className="w-4 h-4" /> Submit Quiz</>
+              }
             </button>
           )}
         </div>
 
-        {/* ABANDON ACTION */}
-        <div className="mt-8 text-center pb-8">
-          <button 
-            onClick={() => { if (confirm('Abandon this quiz? Progress will be lost.')) window.location.href = '/dashboard'; }} 
-            className="text-[11px] font-bold text-white/30 hover:text-rose-400 transition-colors uppercase tracking-widest border-b border-transparent hover:border-rose-400 pb-1"
+        {/* Abandon */}
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => { if (confirm('Abandon this quiz? Progress will be lost.')) router.push('/dashboard'); }}
+            className="text-xs font-medium transition-colors"
+            style={{ color: '#CBD5E1' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
+            onMouseLeave={e => e.currentTarget.style.color = '#CBD5E1'}
           >
             Abandon Quiz
           </button>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
