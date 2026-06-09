@@ -12,6 +12,11 @@ import RecentQuizzes from '@/components/dashboard/RecentQuizzes';
 import RecommendedResources from '@/components/dashboard/RecommendedResources';
 import PerformanceAnalytics from '@/components/dashboard/PerformanceAnalytics';
 import AchievementPanel from '@/components/dashboard/AchievementPanel';
+import ResumeCurriculum from '@/components/dashboard/ResumeCurriculum';
+import SystemToolsMatrix from '@/components/dashboard/SystemToolsMatrix';
+import SubjectAccuracyProfiler from '@/components/dashboard/SubjectAccuracyProfiler';
+import MilestonesLocked from '@/components/dashboard/MilestonesLocked';
+import RecentEvaluationRecords from '@/components/dashboard/RecentEvaluationRecords';
 
 export default function StudentDashboardPage() {
   const [studentSession, setStudentSession] = useState<any>(null);
