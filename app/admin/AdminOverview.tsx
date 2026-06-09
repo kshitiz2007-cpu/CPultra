@@ -28,24 +28,39 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
     async function fetchLiveMetrics() {
       try {
         setLoading(true);
+        setError(null);
         
-        // Target your exact table from the SQL editor: 'quiz_attempts'
+        // 1. Fetch rows from your existing production table: 'attempts'
+        // Selecting * to safely pull whichever columns hold your names, subjects, and scores
         const { data, error: dbError } = await supabase
-          .from('quiz_attempts')
-          .select('student_name, subject, score_percentage');
+          .from('attempts')
+          .select('*');
 
         if (dbError) throw dbError;
 
         if (data && data.length > 0) {
-          // 1. COMPUTE SUBJECT AVERAGES
+          
+          // ─── DATA MAP SAFEGUARDS ───
+          // Dynamically matches your column keys if named slightly differently
+          const getStudentName = (row: any) => row.student_name || row.user_name || row.email || row.student_id || 'Unknown Student';
+          const getSubject = (row: any) => row.subject || row.category || row.quiz_title || 'General';
+          const getScore = (row: any) => {
+            const val = row.score_percentage ?? row.score ?? row.percentage ?? row.marks;
+            return typeof val === 'number' ? val : parseInt(val) || 0;
+          };
+
+          // 2. COMPUTE SUBJECT AVERAGES
           const rawSubjectGroups: { [key: string]: { total: number; count: number } } = {};
           
           data.forEach((row) => {
-            if (!rawSubjectGroups[row.subject]) {
-              rawSubjectGroups[row.subject] = { total: 0, count: 0 };
+            const currentSubject = getSubject(row);
+            const currentScore = getScore(row);
+
+            if (!rawSubjectGroups[currentSubject]) {
+              rawSubjectGroups[currentSubject] = { total: 0, count: 0 };
             }
-            rawSubjectGroups[row.subject].total += row.score_percentage;
-            rawSubjectGroups[row.subject].count += 1;
+            rawSubjectGroups[currentSubject].total += currentScore;
+            rawSubjectGroups[currentSubject].count += 1;
           });
 
           const calculatedSubjects = Object.keys(rawSubjectGroups).map((sub) => ({
@@ -55,11 +70,15 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
           
           setSubjects(calculatedSubjects);
 
-          // 2. COMPUTE TOP PERFORMERS (Highest score achieved per student)
+          // 3. COMPUTE TOP PERFORMERS (Highest score achieved per unique user)
           const highScoresPerStudent: { [key: string]: number } = {};
+          
           data.forEach((row) => {
-            if (!highScoresPerStudent[row.student_name] || row.score_percentage > highScoresPerStudent[row.student_name]) {
-              highScoresPerStudent[row.student_name] = row.score_percentage;
+            const studentName = getStudentName(row);
+            const currentScore = getScore(row);
+
+            if (!highScoresPerStudent[studentName] || currentScore > highScoresPerStudent[studentName]) {
+              highScoresPerStudent[studentName] = currentScore;
             }
           });
 
@@ -68,13 +87,13 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
               name,
               score: highScoresPerStudent[name],
             }))
-            .sort((a, b) => b.score - a.score) // Highest first
-            .slice(0, 3); // Top 3 spots
+            .sort((a, b) => b.score - a.score) // Order highest scores first
+            .slice(0, 3); // Grab top 3 leaderboard positions
 
           setPerformers(sortedPerformers);
         }
       } catch (err: any) {
-        console.error('Failed processing dashboard queries:', err);
+        console.error('Failed processing metrics from attempts table:', err);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -88,7 +107,7 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
     return (
       <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/10 rounded-[2rem] p-16 flex flex-col items-center justify-center text-white/50">
         <Loader2 className="w-10 h-10 animate-spin text-emerald-400 mb-3" />
-        <p className="text-sm font-medium tracking-wide">Syncing realtime data metrics...</p>
+        <p className="text-sm font-medium tracking-wide">Syncing real-time records...</p>
       </div>
     );
   }
@@ -96,7 +115,7 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
   if (error) {
     return (
       <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-[2rem] p-6 text-center">
-        <p className="font-bold">Database Sync Error</p>
+        <p className="font-bold">Database Synchronize Failure</p>
         <p className="text-sm opacity-80 mt-1">{error}</p>
       </div>
     );
@@ -133,7 +152,7 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
                 </div>
               ))
             ) : (
-              <p className="text-white/40 text-sm">No quiz attempts logged in database.</p>
+              <p className="text-white/40 text-sm">No attempts records currently available.</p>
             )}
           </div>
         </div>
@@ -170,7 +189,7 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
                 </div>
               ))
             ) : (
-              <p className="text-white/40 text-sm">No student leaderboard details available.</p>
+              <p className="text-white/40 text-sm">No student ranking logs available.</p>
             )}
           </div>
         </div>
