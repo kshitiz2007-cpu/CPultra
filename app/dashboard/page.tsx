@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { Loader2 } from 'lucide-react';
+import { Loader2, LogOut, LayoutDashboard } from 'lucide-react';
 
 import HeroSection from '@/components/dashboard/HeroSection';
 import StatsCards from '@/components/dashboard/StatsCards';
@@ -20,7 +20,6 @@ export default function StudentDashboardPage() {
   const [resources, setResources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 1. INITIAL REST FULFILMENT DATA FETCH
   useEffect(() => {
     async function initDashboard() {
       try {
@@ -31,32 +30,35 @@ export default function StudentDashboardPage() {
         }
         setStudentSession(session);
 
-        // Fetch profile metrics
+        // Fetch user profile metrics
         const { data: profileData } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', session.user.id)
-          .single();
-        setProfile(profileData);
+          .maybeSingle();
+        
+        setProfile(profileData || { name: 'Aspirant', global_rank: '#1,422' });
 
         // Fetch student's test history
         const { data: attemptsData } = await supabase
           .from('attempts')
           .select('*')
-          .eq('user_id', session.user.id) // Fallback or direct check matching your analytics schema
+          .eq('user_id', session.user.id)
           .order('completed_at', { ascending: false });
+        
         setAttempts(attemptsData || []);
 
-        // Fetch latest active learning materials
+        // Fetch latest resources visible to all users
         const { data: resourcesData } = await supabase
           .from('resources')
           .select('*')
           .order('created_at', { ascending: false })
           .limit(5);
+        
         setResources(resourcesData || []);
 
       } catch (err) {
-        console.error('Dashboard boot initialization error:', err);
+        console.error('Dashboard recovery failed:', err);
       } finally {
         setLoading(false);
       }
@@ -64,65 +66,79 @@ export default function StudentDashboardPage() {
     initDashboard();
   }, []);
 
-  // 2. SUPABASE REALTIME MULTI-CHANNEL LISTENERS
+  // REAL-TIME DATA STREAM HOOKS
   useEffect(() => {
     if (!studentSession?.user?.id) return;
 
-    // Listen to changes across all tables impacting the student interface
-    const dashboardChannel = supabase
-      .channel('student_workspace_stream')
-      
-      // Listen for new admin-added resources
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'resources' }, (payload) => {
-        setResources((prev) => [payload.new, ...prev.slice(0, 4)]);
+    const studentChannel = supabase
+      .channel('live_student_feed')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'resources' }, async () => {
+        const { data } = await supabase.from('resources').select('*').order('created_at', { ascending: false }).limit(5);
+        if (data) setResources(data);
       })
-      
-      // Listen for deleted resources
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'resources' }, (payload) => {
-        setResources((prev) => prev.filter(r => r.id !== payload.old.id));
-      })
-
-      // Listen for profile/stat updates (e.g., automated rank changes or administrative corrections)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${studentSession.user.id}` }, (payload) => {
-        setProfile(payload.new);
-      })
-
-      // Listen for new test attempts processing in real-time
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'attempts', filter: `user_id=eq.${studentSession.user.id}` }, (payload) => {
         setAttempts((prev) => [payload.new, ...prev]);
       })
-      
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${studentSession.user.id}` }, (payload) => {
+        setProfile(payload.new);
+      })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(dashboardChannel);
+      supabase.removeChannel(studentChannel);
     };
   }, [studentSession]);
+
+  // LOGOUT HANDLER PIPELINE
+  const handleLogout = async () => {
+    try {
+      setLoading(true);
+      await supabase.auth.signOut();
+      window.location.href = '/';
+    } catch (err) {
+      console.error('Error logging out client session:', err);
+      setLoading(false);
+    }
+  };
 
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#020617] text-emerald-400">
         <Loader2 className="w-10 h-10 animate-spin mb-4" />
-        <p className="font-medium text-white/70 text-sm">Synchronizing dashboard matrix...</p>
+        <p className="text-sm text-white/60">Updating authorization state...</p>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#020617] text-white relative overflow-hidden p-4 md:p-8 font-sans antialiased">
-      {/* Visual Alignment Layer Matching Admin Ambience Background Gradients */}
+      {/* Background Ambience Gradients */}
       <div className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-emerald-600/10 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[35rem] h-[35rem] bg-indigo-600/10 rounded-full blur-[140px] pointer-events-none" />
 
       <div className="max-w-[1600px] mx-auto space-y-8 relative z-10">
         
-        {/* Module Area Header */}
-        <HeroSection userName={profile?.name || studentSession?.user?.email?.split('@')[0]} />
-
-        {/* 4-KPI Analytics Grid Layout linked to live database attributes */}
+        {/* TOP INTERACTIVE GLASS BAR WITH LOGOUT CONTROL */}
+        <div className="w-full bg-[#090d1f]/60 backdrop-blur-2xl border border-white/10 rounded-3xl px-6 py-4 flex items-center justify-between shadow-[0_8px_32px_0_rgba(0,0,0,0.2)]">
+          <div className="flex items-center gap-3">
+            <LayoutDashboard className="h-5 w-5 text-emerald-400" />
+            <span className="text-sm font-black tracking-wider uppercase text-white/80">Student Workspace</span>
+          </div>
+          
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-300 font-bold text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-md"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Sign Out
+          </button>
+        </div>
+        
+        {/* Main Content Sections */}
+        <HeroSection userName={profile?.name || studentSession?.user?.email?.split('@')[0]} attempts={attempts} />
+        
         <StatsCards attempts={attempts} profile={profile} />
 
-        {/* Structural Sub-grid Partition Assemblies */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
