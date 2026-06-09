@@ -1,182 +1,221 @@
 'use client';
+export const dynamic = "force-dynamic";
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { useRouter } from 'next/navigation';
-import {
-  LayoutDashboard, Users, FileQuestion, CreditCard,
-  FolderOpen, Sparkles, Upload, LogOut, BookOpen, ChevronRight
-} from 'lucide-react';
+
 import AdminOverview from './AdminOverview';
+import AdminInbox from './AdminInbox';
+import AiQuizBuilder from './AiQuizBuilder';
+import ResourceManager from './ResourceManager';
+import CsvImporter from './CsvImporter';
+import PaymentsManager from './PaymentsManager';
 import StudentsManager from './StudentsManager';
 import QuizManager from './QuizManager';
-import PaymentsManager from './PaymentsManager';
-import ResourceManager from './ResourceManager';
-import AiQuizBuilder from './AiQuizBuilder';
-import CsvImporter from './CsvImporter';
+import CurrentAffairsManager from './CurrentAffairsManager'; // Imported the new manager component
 
-const NAV_ITEMS = [
-  { id: 'overview',  label: 'Overview',     icon: LayoutDashboard, group: 'main' },
-  { id: 'students',  label: 'Students',     icon: Users,           group: 'main' },
-  { id: 'quizzes',   label: 'Quizzes',      icon: FileQuestion,    group: 'main' },
-  { id: 'payments',  label: 'Payments',     icon: CreditCard,      group: 'main' },
-  { id: 'resources', label: 'Resources',    icon: FolderOpen,      group: 'content' },
-  { id: 'ai-builder',label: 'AI Builder',   icon: Sparkles,        group: 'content' },
-  { id: 'csv-import',label: 'CSV Import',   icon: Upload,          group: 'content' },
+import {
+  LayoutDashboard,
+  FileQuestion,
+  Users,
+  FileText,
+  CreditCard,
+  Sparkles,
+  CalendarClock,
+  TableProperties,
+  LogOut,
+  MessageSquare,
+  Bell,
+  Search,
+  Settings,
+  Newspaper
+} from 'lucide-react';
+
+const ADMIN_TABS = [
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'inbox', label: 'Inbox', icon: MessageSquare },
+  { id: 'quizzes', label: 'Quizzes', icon: FileQuestion },
+  { id: 'aigen', label: 'AI Generate', icon: Sparkles },
+  { id: 'currentaffairs', label: 'Current Affairs', icon: Newspaper }, // Connected tab view icon link
+  { id: 'resources', label: 'Resources', icon: FileText },
+  { id: 'students', label: 'Students', icon: Users },
+  { id: 'payments', label: 'Payments', icon: CreditCard },
+  { id: 'scheduled', label: 'Scheduled', icon: CalendarClock },
+  { id: 'csvimport', label: 'CSV Import', icon: TableProperties },
 ];
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('overview');
-  const [adminName, setAdminName] = useState('Admin');
-  const [adminEmail, setAdminEmail] = useState('');
-  const router = useRouter();
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setAdminEmail(user.email || '');
-        setAdminName(user.user_metadata?.full_name?.split(' ')[0] || 'Admin');
+    async function checkAdmin() {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError || !session) {
+          window.location.href = '/';
+          return;
+        }
+
+        const email = session.user.email || '';
+
+        if (
+          email === 'kshitiz2007@gmail.com' ||
+          email === 'admin@civilprep.in'
+        ) {
+          setLoading(false);
+          return;
+        }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile?.role !== 'admin') {
+          window.location.href = '/dashboard';
+          return;
+        }
+
+        setLoading(false);
+      } catch {
+        window.location.href = '/dashboard';
       }
-    });
+    }
+
+    checkAdmin();
   }, []);
 
-  const handleSignOut = async () => {
+  const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push('/');
+    window.location.href = '/';
   };
 
-  const currentNav = NAV_ITEMS.find(n => n.id === activeTab);
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'overview':   return <AdminOverview />;
-      case 'students':   return <StudentsManager />;
-      case 'quizzes':    return <QuizManager />;
-      case 'payments':   return <PaymentsManager />;
-      case 'resources':  return <ResourceManager />;
-      case 'ai-builder': return <AiQuizBuilder />;
-      case 'csv-import': return <CsvImporter />;
-      default:           return <AdminOverview />;
-    }
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#020617]">
+        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: '#F1F5F9' }}>
+    <div className="min-h-screen bg-[#020617] relative overflow-hidden flex flex-col md:flex-row w-full text-white">
 
-      {/* ── Sidebar ─────────────────────────────────────────────── */}
-      <aside
-        className="sidebar-texture flex flex-col w-[220px] shrink-0 h-full border-r"
-        style={{ borderColor: '#1E293B' }}
-      >
-        {/* Logo */}
-        <div className="px-4 py-5 border-b" style={{ borderColor: '#1E293B' }}>
-          <div className="flex items-center gap-2.5">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: 'rgba(99,102,241,0.25)', border: '1px solid rgba(99,102,241,0.4)' }}
-            >
-              <BookOpen className="w-4 h-4" style={{ color: '#A5B4FC' }} />
+      {/* AMBIEBT BACKGROUND LIGHTING BLOBS */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-emerald-600/20 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[35rem] h-[35rem] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-[30%] left-[20%] w-[25rem] h-[25rem] bg-purple-500/10 rounded-full blur-[100px] pointer-events-none" />
+
+      {/* DASHBOARD SIDEBAR */}
+      <aside className="w-full md:w-72 md:h-screen bg-white/[0.03] border-r border-white/10 backdrop-blur-2xl relative z-20 flex flex-col">
+
+        <div className="p-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <div className="overflow-hidden">
-              <div className="text-sm font-bold text-white leading-tight truncate">CivilPrep</div>
-              <div className="text-[10px] truncate" style={{ color: '#475569' }}>Admin Console</div>
+            <div>
+              <h1 className="font-black text-xl">CivilPrep</h1>
+              <p className="text-xs text-emerald-400">Smart UPSC Platform</p>
             </div>
           </div>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 overflow-y-auto px-2 py-3">
-          <div className="mb-1">
-            <div
-              className="px-2 py-1 text-[9px] font-bold tracking-widest uppercase mb-1"
-              style={{ color: '#334155' }}
-            >
-              Platform
-            </div>
-            {NAV_ITEMS.filter(n => n.group === 'main').map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                className={`nav-item w-full text-left ${activeTab === id ? 'active' : ''}`}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
+        <nav className="flex-1 px-4 space-y-2 overflow-y-auto scrollbar-none pb-4">
+          {ADMIN_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
 
-          <div className="mt-3">
-            <div
-              className="px-2 py-1 text-[9px] font-bold tracking-widest uppercase mb-1"
-              style={{ color: '#334155' }}
-            >
-              Content
-            </div>
-            {NAV_ITEMS.filter(n => n.group === 'content').map(({ id, label, icon: Icon }) => (
+            return (
               <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                className={`nav-item w-full text-left ${activeTab === id ? 'active' : ''}`}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all text-sm font-medium ${
+                  active
+                    ? 'bg-gradient-to-r from-emerald-500/20 to-cyan-500/10 border-white/20 text-white shadow-[0_0_30px_rgba(16,185,129,0.25)]'
+                    : 'text-white/60 border-transparent hover:bg-white/5 hover:text-white'
+                }`}
               >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span>{label}</span>
+                <Icon className="w-5 h-5" />
+                {tab.label}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </nav>
 
-        {/* User footer */}
-        <div className="border-t p-3" style={{ borderColor: '#1E293B' }}>
-          <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-              style={{ background: '#6366F1', color: 'white' }}
-            >
-              {adminName.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <div className="text-xs font-semibold text-white truncate">{adminName}</div>
-              <div className="text-[10px] truncate" style={{ color: '#475569' }}>{adminEmail}</div>
-            </div>
-            <button
-              onClick={handleSignOut}
-              title="Sign out"
-              className="shrink-0 p-1 rounded transition-colors"
-              style={{ color: '#475569' }}
-              onMouseEnter={e => (e.currentTarget.style.color = '#94A3B8')}
-              onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
-          </div>
+        <div className="p-4 border-t border-white/10">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm font-semibold transition-colors hover:bg-rose-500/20"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign Out
+          </button>
         </div>
       </aside>
 
-      {/* ── Main area ───────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* MAIN VIEW CONTENT CONTAINER */}
+      <main className="flex-1 h-screen overflow-y-auto p-4 md:p-8 relative z-10">
+        <div className="max-w-[1600px] mx-auto">
 
-        {/* Top bar */}
-        <header
-          className="h-12 flex items-center justify-between px-6 border-b shrink-0"
-          style={{ background: 'white', borderColor: '#E2E8F0' }}
-        >
-          <div className="flex items-center gap-2 text-sm" style={{ color: '#94A3B8' }}>
-            <span>Admin</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-            <span style={{ color: '#0F172A', fontWeight: 600 }}>{currentNav?.label}</span>
-          </div>
-          <div className="text-xs font-medium px-2 py-1 rounded" style={{ background: '#F1F5F9', color: '#64748B' }}>
-            Gyankunj Academy · Betul
-          </div>
-        </header>
+          {/* TOP HEADER TOOLBAR STATUS BAR */}
+          <div className="sticky top-0 z-30 mb-8">
+            <div className="bg-white/[0.04] backdrop-blur-2xl border border-white/10 rounded-3xl px-6 py-4 flex flex-col md:flex-row gap-4 md:justify-between md:items-center">
 
-        {/* Scrollable content */}
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-6xl mx-auto animate-fade-in">
-            {renderContent()}
+              <div className="relative flex-1 max-w-xl">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                <input
+                  placeholder="Search students, quizzes, resources..."
+                  className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white/5 border border-white/10 outline-none focus:border-emerald-500/50 transition-colors text-sm text-white placeholder:text-white/30"
+                />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button className="relative h-12 w-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
+                  <Bell className="w-5 h-5" />
+                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-400" />
+                </button>
+
+                <button className="h-12 w-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
+                  <Settings className="w-5 h-5" />
+                </button>
+
+                <div className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-white/5 border border-white/10">
+                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500" />
+                  <div>
+                    <div className="font-semibold text-sm">Admin</div>
+                    <div className="text-xs text-white/50">CivilPrep</div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </main>
-      </div>
+
+          {/* VIEW SWITCHER LOGIC CONDITIONALS */}
+          {activeTab === 'overview' && <AdminOverview setActiveTab={setActiveTab} />}
+          {activeTab === 'inbox' && <AdminInbox />}
+          {activeTab === 'quizzes' && <QuizManager />}
+          {activeTab === 'aigen' && <AiQuizBuilder />}
+          {activeTab === 'currentaffairs' && <CurrentAffairsManager />}
+          {activeTab === 'resources' && <ResourceManager />}
+          {activeTab === 'students' && <StudentsManager />}
+          {activeTab === 'payments' && <PaymentsManager />}
+          {activeTab === 'csvimport' && <CsvImporter />}
+
+          {activeTab === 'scheduled' && (
+            <div className="bg-white/5 backdrop-blur-2xl p-12 rounded-[2rem] border border-white/10 text-center">
+              <CalendarClock className="w-16 h-16 mx-auto text-emerald-400 mb-4" />
+              <h3 className="text-2xl font-bold">Live Events Module</h3>
+              <p className="text-white/50 mt-3 text-sm">
+                Manage All India Mock Tests and scheduled events.
+              </p>
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }
