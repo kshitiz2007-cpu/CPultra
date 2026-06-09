@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { 
-  FileQuestion, Loader2, Trash2, Save, 
-  CheckCircle, ToggleLeft, ToggleRight
+  FileQuestion, Loader2, Trash2, 
+  ToggleLeft, ToggleRight, FolderOpen, LayoutGrid
 } from 'lucide-react';
 
 interface Quiz {
@@ -34,7 +34,7 @@ export default function QuizManager() {
 
   const fetchQuizzes = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('quizzes')
       .select('*')
       .order('created_at', { ascending: false });
@@ -80,47 +80,52 @@ export default function QuizManager() {
   };
 
   return (
-    <div className="space-y-8 animate-fade-in w-full pb-20">
-      <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-white/60 bg-white/30">
-           <h3 className="font-black text-emerald-950 flex items-center gap-2 text-xl">
-             <FileQuestion className="w-6 h-6 text-emerald-600" /> Organize Existing Quizzes
+    <div className="space-y-8 animate-fade-in w-full pb-20 text-white">
+      <div>
+        <h1 className="text-4xl font-black text-white">Manage Quizzes</h1>
+        <p className="text-white/60 mt-2">Organize existing modules and manage platform visibility</p>
+      </div>
+
+      <div className="bg-white/5 backdrop-blur-2xl rounded-[2rem] border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] overflow-hidden">
+        <div className="p-6 border-b border-white/10 bg-white/[0.02]">
+           <h3 className="font-black flex items-center gap-2 text-xl text-white">
+             <FileQuestion className="w-6 h-6 text-emerald-400" /> Organize Existing Quizzes
            </h3>
-           <p className="text-sm text-gray-600 mt-1 font-medium">Instantly move old quizzes to valid subject folders and toggle their visibility.</p>
+           <p className="text-sm text-white/50 mt-1">Instantly move old quizzes to valid subject folders and toggle visibility.</p>
         </div>
         
         <div className="overflow-x-auto">
           {loading ? (
-             <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
+             <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-400" /></div>
           ) : (
             <table className="w-full text-left min-w-[800px]">
-              <thead className="bg-gray-50/80 text-xs uppercase text-gray-500 border-b border-gray-200">
+              <thead className="bg-white/[0.04] text-xs uppercase text-white/40 border-b border-white/10 font-bold tracking-wider">
                 <tr>
                   <th className="px-6 py-4">Quiz Title</th>
                   <th className="px-6 py-4">Subject Folder (Move)</th>
-                  <th className="px-6 py-4 text-center">Visibility (Active)</th>
+                  <th className="px-6 py-4 text-center">Visibility</th>
                   <th className="px-6 py-4 text-center">Delete</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 bg-white/20">
+              <tbody className="divide-y divide-white/5 bg-transparent">
                 {quizzes.map((q) => (
-                  <tr key={q.id} className="hover:bg-white/60 transition-colors">
+                  <tr key={q.id} className="hover:bg-white/[0.02] transition-colors">
                     
                     <td className="px-6 py-4">
-                      <div className="font-bold text-gray-900 line-clamp-1">{q.title}</div>
-                      <div className="text-[10px] text-gray-400 mt-1 uppercase tracking-widest">{q.time_limit} mins</div>
+                      <div className="font-bold text-white line-clamp-1">{q.title}</div>
+                      <div className="text-[10px] text-emerald-400 mt-1 font-bold uppercase tracking-widest">{q.time_limit} mins</div>
                     </td>
 
                     {/* Category Dropdown */}
                     <td className="px-6 py-4">
                       <select 
-                        className={`p-2 rounded-xl text-sm font-bold border transition-colors outline-none cursor-pointer ${successId === q.id ? 'bg-green-50 border-green-300 text-green-700' : 'bg-white border-gray-200 text-gray-700'}`}
+                        className={`p-2.5 rounded-xl text-sm font-bold border transition-colors outline-none cursor-pointer bg-[#0f172a] text-white ${successId === q.id ? 'border-emerald-500 text-emerald-400' : 'border-white/10 hover:border-white/20'}`}
                         value={q.category || ''}
                         onChange={(e) => handleUpdateCategory(q.id, e.target.value)}
                         disabled={actionLoadingId === q.id}
                       >
-                        {!CATEGORIES.includes(q.category) && <option value={q.category}>{q.category} (Old)</option>}
-                        {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        {!CATEGORIES.includes(q.category) && <option value={q.category} className="bg-[#0f172a]">{q.category} (Old)</option>}
+                        {CATEGORIES.map(cat => <option key={cat} value={cat} className="bg-[#0f172a]">{cat}</option>)}
                       </select>
                     </td>
 
@@ -129,16 +134,16 @@ export default function QuizManager() {
                       <button 
                         onClick={() => handleToggleActive(q.id, q.active)}
                         disabled={actionLoadingId === q.id}
-                        className={`flex items-center justify-center w-28 mx-auto gap-2 p-2 rounded-xl border transition-all ${q.active ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}
+                        className={`flex items-center justify-center w-28 mx-auto gap-2 p-2 rounded-xl border transition-all ${q.active ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-white/5 text-white/40 border-white/10'}`}
                       >
-                        {q.active ? <ToggleRight className="w-5 h-5 text-emerald-500" /> : <ToggleLeft className="w-5 h-5 text-gray-400" />}
-                        <span className="text-xs font-bold uppercase">{q.active ? 'Visible' : 'Hidden'}</span>
+                        {q.active ? <ToggleRight className="w-5 h-5 text-emerald-400" /> : <ToggleLeft className="w-5 h-5 text-white/20" />}
+                        <span className="text-xs font-bold uppercase">{q.active ? 'Active' : 'Draft'}</span>
                       </button>
                     </td>
 
                     {/* Delete Button */}
                     <td className="px-6 py-4 text-center">
-                      <button onClick={() => deleteQuiz(q.id)} disabled={actionLoadingId === q.id} className="p-2 bg-white rounded-xl border border-gray-200 text-rose-500 hover:bg-rose-50 hover:border-rose-200 transition-colors shadow-sm">
+                      <button onClick={() => deleteQuiz(q.id)} disabled={actionLoadingId === q.id} className="p-2 bg-white/5 rounded-xl border border-white/10 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/30 transition-colors shadow-sm">
                         {actionLoadingId === q.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                       </button>
                     </td>
