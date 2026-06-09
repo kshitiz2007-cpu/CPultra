@@ -6,17 +6,12 @@ import { Loader2, LogOut, LayoutDashboard } from 'lucide-react';
 
 import HeroSection from '@/components/dashboard/HeroSection';
 import StatsCards from '@/components/dashboard/StatsCards';
-import ContinueLearning from '@/components/dashboard/ContinueLearning';
-import QuickActions from '@/components/dashboard/QuickActions';
-import RecentQuizzes from '@/components/dashboard/RecentQuizzes';
-import RecommendedResources from '@/components/dashboard/RecommendedResources';
-import PerformanceAnalytics from '@/components/dashboard/PerformanceAnalytics';
-import AchievementPanel from '@/components/dashboard/AchievementPanel';
 import ResumeCurriculum from '@/components/dashboard/ResumeCurriculum';
 import SystemToolsMatrix from '@/components/dashboard/SystemToolsMatrix';
+import RecentEvaluationRecords from '@/components/dashboard/RecentEvaluationRecords';
 import SubjectAccuracyProfiler from '@/components/dashboard/SubjectAccuracyProfiler';
 import MilestonesLocked from '@/components/dashboard/MilestonesLocked';
-import RecentEvaluationRecords from '@/components/dashboard/RecentEvaluationRecords';
+import RecommendedResources from '@/components/dashboard/RecommendedResources';
 
 export default function StudentDashboardPage() {
   const [studentSession, setStudentSession] = useState<any>(null);
@@ -35,7 +30,7 @@ export default function StudentDashboardPage() {
         }
         setStudentSession(session);
 
-        // Fetch user profile metrics
+        // 1. Fetch user profile metrics
         const { data: profileData } = await supabase
           .from('profiles')
           .select('*')
@@ -44,7 +39,7 @@ export default function StudentDashboardPage() {
         
         setProfile(profileData || { name: 'Aspirant', global_rank: '#1,422' });
 
-        // Fetch student's test history
+        // 2. Fetch student's live test history
         const { data: attemptsData } = await supabase
           .from('attempts')
           .select('*')
@@ -53,7 +48,7 @@ export default function StudentDashboardPage() {
         
         setAttempts(attemptsData || []);
 
-        // Fetch latest resources visible to all users
+        // 3. Fetch latest resources visible to all users
         const { data: resourcesData } = await supabase
           .from('resources')
           .select('*')
@@ -63,7 +58,7 @@ export default function StudentDashboardPage() {
         setResources(resourcesData || []);
 
       } catch (err) {
-        console.error('Dashboard recovery failed:', err);
+        console.error('Dashboard pipeline failure:', err);
       } finally {
         setLoading(false);
       }
@@ -71,19 +66,22 @@ export default function StudentDashboardPage() {
     initDashboard();
   }, []);
 
-  // REAL-TIME DATA STREAM HOOKS
+  // REAL-TIME BROADCAST ENGINE DATA HOOKS
   useEffect(() => {
     if (!studentSession?.user?.id) return;
 
     const studentChannel = supabase
       .channel('live_student_feed')
+      // Stream educational learning assets updates
       .on('postgres_changes', { event: '*', schema: 'public', table: 'resources' }, async () => {
         const { data } = await supabase.from('resources').select('*').order('created_at', { ascending: false }).limit(5);
         if (data) setResources(data);
       })
+      // Intercept quiz attempt insertions and append instantly
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'attempts', filter: `user_id=eq.${studentSession.user.id}` }, (payload) => {
         setAttempts((prev) => [payload.new, ...prev]);
       })
+      // Track profile changes (e.g. rank calculation modifications)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${studentSession.user.id}` }, (payload) => {
         setProfile(payload.new);
       })
@@ -110,20 +108,20 @@ export default function StudentDashboardPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#020617] text-emerald-400">
         <Loader2 className="w-10 h-10 animate-spin mb-4" />
-        <p className="text-sm text-white/60">Updating authorization state...</p>
+        <p className="text-sm text-white/60">Updating session pipelines...</p>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#020617] text-white relative overflow-hidden p-4 md:p-8 font-sans antialiased">
-      {/* Background Ambience Gradients */}
+      {/* Visual Alignment Ambiences */}
       <div className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-emerald-600/10 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[35rem] h-[35rem] bg-indigo-600/10 rounded-full blur-[140px] pointer-events-none" />
 
       <div className="max-w-[1600px] mx-auto space-y-8 relative z-10">
         
-        {/* TOP INTERACTIVE GLASS BAR WITH LOGOUT CONTROL */}
+        {/* INTERACTIVE WORKSPACE MENU BAR */}
         <div className="w-full bg-[#090d1f]/60 backdrop-blur-2xl border border-white/10 rounded-3xl px-6 py-4 flex items-center justify-between shadow-[0_8px_32px_0_rgba(0,0,0,0.2)]">
           <div className="flex items-center gap-3">
             <LayoutDashboard className="h-5 w-5 text-emerald-400" />
@@ -139,23 +137,25 @@ export default function StudentDashboardPage() {
           </button>
         </div>
         
-        {/* Main Content Sections */}
+        {/* Pass downstream arrays directly into child frames */}
         <HeroSection userName={profile?.name || studentSession?.user?.email?.split('@')[0]} attempts={attempts} />
         
         <StatsCards attempts={attempts} profile={profile} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Content Workspace Grid (Left Side) */}
           <div className="lg:col-span-2 space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <ContinueLearning userId={studentSession?.user?.id} />
-              <QuickActions />
+              <ResumeCurriculum userId={studentSession?.user?.id} />
+              <SystemToolsMatrix />
             </div>
-            <RecentQuizzes attempts={attempts} />
+            <RecentEvaluationRecords attempts={attempts} />
           </div>
 
+          {/* Analytics Column Sidebar (Right Side) */}
           <div className="lg:col-span-1 space-y-8">
-            <PerformanceAnalytics attempts={attempts} />
-            <AchievementPanel attempts={attempts} />
+            <SubjectAccuracyProfiler attempts={attempts} />
+            <MilestonesLocked attempts={attempts} />
             <RecommendedResources resources={resources} />
           </div>
         </div>
