@@ -2,196 +2,250 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { Sparkles, Save, Loader2, X } from 'lucide-react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Loader2, Sparkles, Save, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
-interface Question {
-  text: string;
-  textHi: string;
-  options: string[];
-  optionsHi: string[];
-  correct: number;
-}
+const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || '');
+
+const CATEGORIES = [
+  'History', 'Geography', 'Polity', 'Economy',
+  'Science & Tech', 'Environment', 'Current Affairs',
+  'Maths', 'Reasoning', 'GS',
+];
+
+const QUESTION_COUNTS = [5, 10, 15, 20];
 
 export default function AiQuizBuilder() {
   const [topic, setTopic] = useState('');
-  const [numQuestions, setNumQuestions] = useState(5);
+  const [category, setCategory] = useState('History');
+  const [count, setCount] = useState(10);
   const [loading, setLoading] = useState(false);
-  const [generatedQuestions, setGeneratedQuestions] = useState<Question[] | null>(null);
-  const [quizTitle, setQuizTitle] = useState('');
-  const [quizCategory, setQuizCategory] = useState('GS');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [generatedQuiz, setGeneratedQuiz] = useState<any>(null);
+  const [expandedQ, setExpandedQ] = useState<number | null>(null);
 
   const generateQuiz = async () => {
-    if (!topic) return alert('Please enter a topic or paste text.');
+    if (!topic.trim()) return alert('Please enter a topic.');
     setLoading(true);
+    setGeneratedQuiz(null);
+    setSaved(false);
 
     try {
-      const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!);
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-      const prompt = `
-        You are an expert educator. Generate a multiple-choice quiz about: "${topic}".
-        Create exactly ${numQuestions} questions.
-        The output MUST be a valid JSON array of objects. 
-        Do not include any markdown formatting like \`\`\`json.
-        Each object must have exactly this structure:
-        {
-          "text": "Question in English",
-          "textHi": "Question in Hindi",
-          "options": ["Option A", "Option B", "Option C", "Option D"],
-          "optionsHi": ["विकल्प A", "विकल्प B", "विकल्प C", "विकल्प D"],
-          "correct": 0
-        }
-      `;
+      const prompt = `Create a quiz with ${count} multiple choice questions about "${topic}" for UPSC/MPPSC civil services exam preparation.
+Return ONLY a JSON object in this exact format (no markdown, no extra text):
+{
+  "title": "Quiz Title Here",
+  "category": "${category}",
+  "questions": [
+    {
+      "question": "Question text?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "answer": "Correct Option text"
+    }
+  ]
+}`;
 
       const result = await model.generateContent(prompt);
-      const responseText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-      
-      const parsedQuestions = JSON.parse(responseText);
-      setGeneratedQuestions(parsedQuestions);
-      setQuizTitle(`AI Quiz: ${topic.substring(0, 25)}...`);
-    } catch (error) {
-      console.error(error);
-      alert('Failed to generate quiz. Check your API configurations.');
+      const raw = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(raw);
+      setGeneratedQuiz(parsed);
+    } catch (err) {
+      console.error(err);
+      alert('AI generation failed. Check console for details.');
     } finally {
       setLoading(false);
     }
   };
 
   const saveToDatabase = async () => {
-    if (!generatedQuestions || !quizTitle) return;
-    setLoading(true);
-
-    const newQuiz = {
-      id: `q_${Date.now()}`,
-      title: quizTitle,
-      category: quizCategory,
-      section: quizCategory,
-      time_limit: numQuestions,
-      is_paid: false,
-      price: 0,
-      active: false,
-      questions: generatedQuestions.map((q, i) => ({ id: `gen_${i}`, ...q }))
-    };
-
-    const { error } = await supabase.from('quizzes').insert([newQuiz]);
-
-    setLoading(false);
-    if (error) {
-      alert('Error saving quiz: ' + error.message);
-    } else {
-      alert('Quiz successfully saved to drafts!');
-      setGeneratedQuestions(null);
-      setTopic('');
+    if (!generatedQuiz) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('quizzes').insert([{
+        title: generatedQuiz.title,
+        category: generatedQuiz.category,
+        questions: generatedQuiz.questions,
+        active: true,
+      }]);
+      if (error) throw error;
+      setSaved(true);
+      setTimeout(() => { setGeneratedQuiz(null); setTopic(''); setSaved(false); }, 2000);
+    } catch {
+      alert('Error saving quiz to database.');
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div className="space-y-6 animate-fade-in text-white pb-20">
+    <div className="space-y-5 max-w-3xl">
       <div>
-        <h2 className="text-4xl font-black text-white flex items-center gap-3">
-          <Sparkles className="w-8 h-8 text-cyan-400 animate-pulse"/> AI Generation Studio
-        </h2>
-        <p className="text-white/60 mt-2">Produce localized bilingual questions in real time with Gemini Engine</p>
+        <h1 className="text-xl font-bold" style={{ color: '#0F172A' }}>AI Quiz Builder</h1>
+        <p className="text-sm mt-0.5" style={{ color: '#64748B' }}>
+          Generate UPSC-ready MCQs instantly using Gemini AI.
+        </p>
       </div>
 
-      {!generatedQuestions ? (
-        <div className="bg-white/5 backdrop-blur-2xl rounded-[2rem] p-6 md:p-8 border border-white/10 shadow-2xl">
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold text-white/40 uppercase tracking-wider">
-                Topic or Source Reference Data
-              </label>
-              <textarea 
-                className="w-full min-h-[150px] bg-white/5 border border-white/10 rounded-2xl p-4 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder-white/20 resize-y" 
-                placeholder="Paste prompt modules, raw notes, or direct topics like 'UPSC Laxmikanth Fundamental Rights'..."
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-              />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Number of Questions</label>
-                <input 
-                  type="number" 
-                  className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500" 
-                  min="1" max="25" value={numQuestions}
-                  onChange={(e) => setNumQuestions(Number(e.target.value))}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-bold text-white/40 uppercase tracking-wider">Assigned Folder</label>
-                <select 
-                  className="bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 outline-none"
-                  value={quizCategory} onChange={(e) => setQuizCategory(e.target.value)}
-                >
-                  <option value="GS" className="bg-[#0f172a]">General Studies</option>
-                  <option value="CA" className="bg-[#0f172a]">Current Affairs</option>
-                  <option value="Maths" className="bg-[#0f172a]">Mathematics</option>
-                  <option value="Reasoning" className="bg-[#0f172a]">Reasoning</option>
-                </select>
-              </div>
-            </div>
+      {/* Configuration panel */}
+      <div className="panel p-5">
+        <h2 className="text-sm font-semibold mb-4 flex items-center gap-2" style={{ color: '#0F172A' }}>
+          <Sparkles className="w-4 h-4" style={{ color: '#6366F1' }} />
+          Configure Quiz
+        </h2>
 
-            <button 
-              onClick={generateQuiz} disabled={loading}
-              className="mt-4 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-black py-4 px-6 rounded-2xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:opacity-90 disabled:opacity-50 flex justify-center items-center gap-2"
-            >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin"/> : <Sparkles className="w-5 h-5"/>}
-              {loading ? 'Synthesizing with Gemini AI...' : 'Generate Bilingual Core Module'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col gap-4">
-            <h3 className="text-lg font-bold text-white">Review System Generation</h3>
-            <input 
-              type="text" className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold" 
-              value={quizTitle} onChange={(e) => setQuizTitle(e.target.value)}
+        <div className="space-y-3">
+          {/* Topic */}
+          <div>
+            <label className="form-label">Topic / Prompt</label>
+            <textarea
+              value={topic}
+              onChange={e => setTopic(e.target.value)}
+              placeholder="e.g. Maratha Empire and Peshwa Administration, or Indian Constitution — Fundamental Rights"
+              className="form-input"
+              style={{ minHeight: 80, resize: 'vertical' }}
+              rows={3}
             />
           </div>
 
-          <div className="space-y-4">
-            {generatedQuestions.map((q, i) => (
-              <div key={i} className="bg-white/5 border border-white/10 rounded-[2rem] p-6 relative group border-l-4 border-emerald-500">
-                <button 
-                  onClick={() => setGeneratedQuestions(generatedQuestions.filter((_, idx) => idx !== i))}
-                  className="absolute top-4 right-4 p-2 bg-white/5 text-rose-400 border border-white/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-500/20"
-                >
-                  <X className="w-4 h-4"/>
-                </button>
-                
-                <p className="font-bold text-white mb-2"><span className="text-emerald-400">Q{i + 1} (EN):</span> {q.text}</p>
-                <p className="text-white/80 font-serif mb-4"><span className="text-cyan-400 font-sans font-bold">Q{i + 1} (HI):</span> {q.textHi}</p>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                  {q.options.map((opt, optIdx) => (
-                    <div key={optIdx} className={`p-3 rounded-xl border ${q.correct === optIdx ? 'bg-emerald-500/10 border-emerald-500/40 font-bold text-emerald-200' : 'bg-white/[0.02] border-white/10'}`}>
-                      <div className="mb-1">{String.fromCharCode(65 + optIdx)}. {opt}</div>
-                      <div className="text-white/40 text-xs font-serif">{q.optionsHi[optIdx]}</div>
-                    </div>
-                  ))}
-                </div>
+          <div className="grid grid-cols-2 gap-3">
+            {/* Category */}
+            <div>
+              <label className="form-label">Category</label>
+              <select
+                className="form-input"
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+              >
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            {/* Question count */}
+            <div>
+              <label className="form-label">Number of Questions</label>
+              <select
+                className="form-input"
+                value={count}
+                onChange={e => setCount(Number(e.target.value))}
+              >
+                {QUESTION_COUNTS.map(n => (
+                  <option key={n} value={n}>{n} questions</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <button
+            onClick={generateQuiz}
+            disabled={loading}
+            className="btn btn-primary w-full justify-center"
+            style={{ height: 40 }}
+          >
+            {loading
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating with Gemini…</>
+              : <><Sparkles className="w-4 h-4" /> Generate Quiz</>
+            }
+          </button>
+        </div>
+      </div>
+
+      {/* Generated quiz preview */}
+      {generatedQuiz && (
+        <div className="panel overflow-hidden animate-fade-in">
+          <div className="panel-header">
+            <div>
+              <div className="text-sm font-semibold" style={{ color: '#0F172A' }}>
+                {generatedQuiz.title}
               </div>
-            ))}
+              <div className="text-xs mt-0.5" style={{ color: '#94A3B8' }}>
+                {generatedQuiz.questions?.length} questions · {generatedQuiz.category}
+              </div>
+            </div>
+            <button
+              onClick={saveToDatabase}
+              disabled={saving || saved}
+              className="btn btn-primary flex items-center gap-1.5 shrink-0"
+            >
+              {saved
+                ? <><CheckCircle className="w-4 h-4" /> Saved!</>
+                : saving
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
+                : <><Save className="w-4 h-4" /> Save to Platform</>
+              }
+            </button>
           </div>
 
-          <div className="flex gap-4 sticky bottom-6 z-20">
-            <button 
-              onClick={() => setGeneratedQuestions(null)}
-              className="flex-1 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold py-4 rounded-xl transition-all"
-            >
-              Discard Output
-            </button>
-            <button 
-              onClick={saveToDatabase} disabled={loading}
-              className="flex-[2] bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl transition-all flex justify-center items-center gap-2 shadow-lg"
-            >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>}
-              Commit as Draft
-            </button>
+          {/* Question list */}
+          <div className="p-4 space-y-2">
+            {generatedQuiz.questions?.map((q: any, i: number) => (
+              <div
+                key={i}
+                className="rounded-lg overflow-hidden"
+                style={{ border: '1px solid #E2E8F0' }}
+              >
+                {/* Question header */}
+                <button
+                  onClick={() => setExpandedQ(expandedQ === i ? null : i)}
+                  className="w-full flex items-start justify-between gap-3 p-3 text-left transition-colors"
+                  style={{ background: expandedQ === i ? '#F8FAFC' : 'white' }}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span
+                      className="w-5 h-5 rounded text-xs font-bold flex items-center justify-center shrink-0 mt-0.5"
+                      style={{ background: '#EEF2FF', color: '#6366F1' }}
+                    >
+                      {i + 1}
+                    </span>
+                    <span className="text-sm font-medium" style={{ color: '#0F172A' }}>
+                      {q.question}
+                    </span>
+                  </div>
+                  {expandedQ === i
+                    ? <ChevronUp className="w-4 h-4 shrink-0" style={{ color: '#94A3B8' }} />
+                    : <ChevronDown className="w-4 h-4 shrink-0" style={{ color: '#94A3B8' }} />
+                  }
+                </button>
+
+                {/* Options */}
+                {expandedQ === i && (
+                  <div className="px-3 pb-3 space-y-1.5">
+                    {q.options?.map((opt: string, j: number) => (
+                      <div
+                        key={j}
+                        className="flex items-center gap-2.5 py-1.5 px-3 rounded"
+                        style={{
+                          background: opt === q.answer ? '#ECFDF5' : '#F8FAFC',
+                          border: `1px solid ${opt === q.answer ? '#A7F3D0' : '#F1F5F9'}`,
+                        }}
+                      >
+                        <span
+                          className="w-5 h-5 rounded text-xs font-bold flex items-center justify-center shrink-0"
+                          style={{
+                            background: opt === q.answer ? '#10B981' : '#E2E8F0',
+                            color: opt === q.answer ? 'white' : '#64748B',
+                          }}
+                        >
+                          {String.fromCharCode(65 + j)}
+                        </span>
+                        <span
+                          className="text-xs font-medium"
+                          style={{ color: opt === q.answer ? '#065F46' : '#475569' }}
+                        >
+                          {opt}
+                        </span>
+                        {opt === q.answer && (
+                          <CheckCircle className="w-3.5 h-3.5 ml-auto shrink-0" style={{ color: '#10B981' }} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}

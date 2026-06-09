@@ -1,15 +1,17 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({ 
-  variable: "--font-geist-sans", 
-  subsets: ["latin"] 
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({ 
-  variable: "--font-geist-mono", 
-  subsets: ["latin"] 
-});
+export const metadata: Metadata = {
+  title: "CivilPrep by Gyankunj Academy",
+  description: "Admin dashboard for CivilPrep — India's civil services exam preparation platform.",
+};
 
 export default function RootLayout({
   children,
@@ -17,11 +19,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      {/* Added font-sans class here to apply the Inter font globally via globals.css */}
-      <body className="min-h-full flex flex-col font-sans">
-        {children}
-      </body>
+    <html
+      lang="en"
+      className={`${inter.variable} h-full`}
+    >
+      <body className="min-h-full">{children}</body>
     </html>
   );
 }

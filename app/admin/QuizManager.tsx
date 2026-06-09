@@ -2,10 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { 
-  FileQuestion, Loader2, Trash2, 
-  ToggleLeft, ToggleRight, FolderOpen, LayoutGrid
-} from 'lucide-react';
+import { FileQuestion, Loader2, Trash2, CheckCircle, Clock } from 'lucide-react';
 
 interface Quiz {
   id: string;
@@ -19,18 +16,16 @@ interface Quiz {
 const CATEGORIES = [
   'History', 'Geography', 'Polity', 'Economy',
   'Science & Tech', 'Environment', 'Current Affairs',
-  'Maths', 'Reasoning', 'GS'
+  'Maths', 'Reasoning', 'GS',
 ];
 
 export default function QuizManager() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
   const [successId, setSuccessId] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchQuizzes();
-  }, []);
+  useEffect(() => { fetchQuizzes(); }, []);
 
   const fetchQuizzes = async () => {
     setLoading(true);
@@ -38,122 +33,162 @@ export default function QuizManager() {
       .from('quizzes')
       .select('*')
       .order('created_at', { ascending: false });
-
     if (data) setQuizzes(data);
     setLoading(false);
   };
 
-  const handleUpdateCategory = async (id: string, newCat: string) => {
-    setActionLoadingId(id);
-    const { error } = await supabase.from('quizzes').update({ category: newCat }).eq('id', id);
-    if (!error) {
-      setQuizzes(quizzes.map(q => q.id === id ? { ...q, category: newCat } : q));
-      showSuccess(id);
-    } else alert("Failed to update category.");
-    setActionLoadingId(null);
-  };
-
-  const handleToggleActive = async (id: string, currentStatus: boolean) => {
-    setActionLoadingId(id);
-    const newStatus = !currentStatus;
-    const { error } = await supabase.from('quizzes').update({ active: newStatus }).eq('id', id);
-    if (!error) {
-      setQuizzes(quizzes.map(q => q.id === id ? { ...q, active: newStatus } : q));
-      showSuccess(id);
-    } else alert("Failed to update status.");
-    setActionLoadingId(null);
-  };
-
-  const deleteQuiz = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this quiz forever? This will also delete all student attempts for this quiz!')) return;
-    setActionLoadingId(id);
-    const { error } = await supabase.from('quizzes').delete().eq('id', id);
-    if (!error) {
-      setQuizzes(quizzes.filter(q => q.id !== id));
-    } else alert("Failed to delete quiz.");
-    setActionLoadingId(null);
-  };
-
-  const showSuccess = (id: string) => {
+  const flash = (id: string) => {
     setSuccessId(id);
     setTimeout(() => setSuccessId(null), 2000);
   };
 
+  const handleUpdateCategory = async (id: string, cat: string) => {
+    setActionId(id);
+    const { error } = await supabase.from('quizzes').update({ category: cat }).eq('id', id);
+    if (!error) {
+      setQuizzes(quizzes.map(q => q.id === id ? { ...q, category: cat } : q));
+      flash(id);
+    } else alert('Failed to update category.');
+    setActionId(null);
+  };
+
+  const handleToggleActive = async (id: string, current: boolean) => {
+    setActionId(id);
+    const next = !current;
+    const { error } = await supabase.from('quizzes').update({ active: next }).eq('id', id);
+    if (!error) {
+      setQuizzes(quizzes.map(q => q.id === id ? { ...q, active: next } : q));
+      flash(id);
+    } else alert('Failed to update status.');
+    setActionId(null);
+  };
+
+  const deleteQuiz = async (id: string) => {
+    if (!confirm('Delete this quiz? This will also remove all student attempts.')) return;
+    setActionId(id);
+    const { error } = await supabase.from('quizzes').delete().eq('id', id);
+    if (!error) setQuizzes(quizzes.filter(q => q.id !== id));
+    else alert('Failed to delete quiz.');
+    setActionId(null);
+  };
+
   return (
-    <div className="space-y-8 animate-fade-in w-full pb-20 text-white">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-4xl font-black text-white">Manage Quizzes</h1>
-        <p className="text-white/60 mt-2">Organize existing modules and manage platform visibility</p>
+        <h1 className="text-xl font-bold" style={{ color: '#0F172A' }}>Quizzes</h1>
+        <p className="text-sm mt-0.5" style={{ color: '#64748B' }}>
+          Manage categories and visibility for all {quizzes.length} quizzes.
+        </p>
       </div>
 
-      <div className="bg-white/5 backdrop-blur-2xl rounded-[2rem] border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] overflow-hidden">
-        <div className="p-6 border-b border-white/10 bg-white/[0.02]">
-           <h3 className="font-black flex items-center gap-2 text-xl text-white">
-             <FileQuestion className="w-6 h-6 text-emerald-400" /> Organize Existing Quizzes
-           </h3>
-           <p className="text-sm text-white/50 mt-1">Instantly move old quizzes to valid subject folders and toggle visibility.</p>
-        </div>
-        
-        <div className="overflow-x-auto">
-          {loading ? (
-             <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-400" /></div>
-          ) : (
-            <table className="w-full text-left min-w-[800px]">
-              <thead className="bg-white/[0.04] text-xs uppercase text-white/40 border-b border-white/10 font-bold tracking-wider">
+      <div className="panel overflow-hidden">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin mb-3" style={{ color: '#6366F1' }} />
+            <p className="text-sm font-medium" style={{ color: '#94A3B8' }}>Loading quizzes…</p>
+          </div>
+        ) : quizzes.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16" style={{ color: '#94A3B8' }}>
+            <FileQuestion className="w-8 h-8 mb-3" />
+            <p className="text-sm font-medium">No quizzes yet</p>
+            <p className="text-xs mt-1">Use AI Builder or CSV Import to add quizzes.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="data-table" style={{ minWidth: 720 }}>
+              <thead>
                 <tr>
-                  <th className="px-6 py-4">Quiz Title</th>
-                  <th className="px-6 py-4">Subject Folder (Move)</th>
-                  <th className="px-6 py-4 text-center">Visibility</th>
-                  <th className="px-6 py-4 text-center">Delete</th>
+                  <th>Quiz Title</th>
+                  <th>Category</th>
+                  <th style={{ textAlign: 'center' }}>Duration</th>
+                  <th style={{ textAlign: 'center' }}>Status</th>
+                  <th style={{ textAlign: 'center' }}>Delete</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5 bg-transparent">
-                {quizzes.map((q) => (
-                  <tr key={q.id} className="hover:bg-white/[0.02] transition-colors">
-                    
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-white line-clamp-1">{q.title}</div>
-                      <div className="text-[10px] text-emerald-400 mt-1 font-bold uppercase tracking-widest">{q.time_limit} mins</div>
+              <tbody>
+                {quizzes.map(q => (
+                  <tr key={q.id}>
+                    {/* Title */}
+                    <td>
+                      <div className="text-sm font-semibold" style={{ color: '#0F172A', maxWidth: 280 }}>
+                        <span className="line-clamp-1">{q.title}</span>
+                      </div>
+                      {successId === q.id && (
+                        <div className="flex items-center gap-1 mt-0.5 text-xs" style={{ color: '#059669' }}>
+                          <CheckCircle className="w-3 h-3" /> Saved
+                        </div>
+                      )}
                     </td>
 
-                    {/* Category Dropdown */}
-                    <td className="px-6 py-4">
-                      <select 
-                        className={`p-2.5 rounded-xl text-sm font-bold border transition-colors outline-none cursor-pointer bg-[#0f172a] text-white ${successId === q.id ? 'border-emerald-500 text-emerald-400' : 'border-white/10 hover:border-white/20'}`}
+                    {/* Category dropdown */}
+                    <td>
+                      <select
+                        className="form-input"
+                        style={{ width: 'auto', minWidth: 140 }}
                         value={q.category || ''}
-                        onChange={(e) => handleUpdateCategory(q.id, e.target.value)}
-                        disabled={actionLoadingId === q.id}
+                        onChange={e => handleUpdateCategory(q.id, e.target.value)}
+                        disabled={actionId === q.id}
                       >
-                        {!CATEGORIES.includes(q.category) && <option value={q.category} className="bg-[#0f172a]">{q.category} (Old)</option>}
-                        {CATEGORIES.map(cat => <option key={cat} value={cat} className="bg-[#0f172a]">{cat}</option>)}
+                        {!CATEGORIES.includes(q.category) && (
+                          <option value={q.category}>{q.category} (old)</option>
+                        )}
+                        {CATEGORIES.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
                       </select>
                     </td>
 
-                    {/* Active/Draft Toggle */}
-                    <td className="px-6 py-4 text-center">
-                      <button 
-                        onClick={() => handleToggleActive(q.id, q.active)}
-                        disabled={actionLoadingId === q.id}
-                        className={`flex items-center justify-center w-28 mx-auto gap-2 p-2 rounded-xl border transition-all ${q.active ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-white/5 text-white/40 border-white/10'}`}
+                    {/* Duration */}
+                    <td style={{ textAlign: 'center' }}>
+                      <span
+                        className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded"
+                        style={{ background: '#F1F5F9', color: '#64748B' }}
                       >
-                        {q.active ? <ToggleRight className="w-5 h-5 text-emerald-400" /> : <ToggleLeft className="w-5 h-5 text-white/20" />}
-                        <span className="text-xs font-bold uppercase">{q.active ? 'Active' : 'Draft'}</span>
+                        <Clock className="w-3 h-3" /> {q.time_limit}m
+                      </span>
+                    </td>
+
+                    {/* Toggle */}
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        onClick={() => handleToggleActive(q.id, q.active)}
+                        disabled={actionId === q.id}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded text-xs font-semibold transition-all"
+                        style={
+                          q.active
+                            ? { background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }
+                            : { background: '#F8FAFC', color: '#94A3B8', border: '1px solid #E2E8F0' }
+                        }
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full"
+                          style={{ background: q.active ? '#10B981' : '#CBD5E1' }}
+                        />
+                        {q.active ? 'Visible' : 'Hidden'}
                       </button>
                     </td>
 
-                    {/* Delete Button */}
-                    <td className="px-6 py-4 text-center">
-                      <button onClick={() => deleteQuiz(q.id)} disabled={actionLoadingId === q.id} className="p-2 bg-white/5 rounded-xl border border-white/10 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/30 transition-colors shadow-sm">
-                        {actionLoadingId === q.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    {/* Delete */}
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        onClick={() => deleteQuiz(q.id)}
+                        disabled={actionId === q.id}
+                        className="btn btn-icon btn-sm"
+                        style={{ color: '#EF4444', background: '#FEF2F2' }}
+                        title="Delete quiz"
+                      >
+                        {actionId === q.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Trash2 className="w-3.5 h-3.5" />
+                        }
                       </button>
                     </td>
-
                   </tr>
                 ))}
               </tbody>
             </table>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

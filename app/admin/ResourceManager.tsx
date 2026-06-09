@@ -1,296 +1,360 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import {
-  FileText,
-  Plus,
-  Trash2,
-  FolderOpen,
-  Save,
-  Loader2,
-  Link as LinkIcon,
-  Search,
-  BarChart3,
-  BookOpen,
-  Globe
+  FileText, Loader2, Link as LinkIcon, Download,
+  Trash2, UploadCloud, Image as ImageIcon, Save, CheckCircle, PlusCircle
 } from 'lucide-react';
 
-const SUBJECTS = [
-  'History','Geography','Polity','Economy',
-  'Science & Tech','Environment','Current Affairs',
-  'Maths','Reasoning'
+interface Resource {
+  id: string;
+  title: string;
+  file_type: string;
+  file_url: string;
+  category: string;
+  section: string;
+  created_at: string;
+}
+
+const CATEGORIES = [
+  'History', 'Geography', 'Polity', 'Economy',
+  'Science & Tech', 'Environment', 'Current Affairs',
+  'Maths', 'Reasoning', 'GS',
 ];
 
 export default function ResourceManager() {
-  const [resources,setResources] = useState<any[]>([]);
-  const [loading,setLoading] = useState(true);
-  const [saving,setSaving] = useState(false);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionId, setActionId] = useState<string | null>(null);
+  const [successId, setSuccessId] = useState<string | null>(null);
+  const [editSections, setEditSections] = useState<Record<string, string>>({});
 
-  const [search,setSearch] = useState('');
-  const [filter,setFilter] = useState('All');
+  const [newTitle, setNewTitle] = useState('');
+  const [newType, setNewType] = useState('upload');
+  const [newUrl, setNewUrl] = useState('');
+  const [newFile, setNewFile] = useState<File | null>(null);
+  const [newCategory, setNewCategory] = useState('History');
+  const [newSection, setNewSection] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [title,setTitle] = useState('');
-  const [fileType,setFileType] = useState('pdf');
-  const [fileUrl,setFileUrl] = useState('');
-  const [category,setCategory] = useState('History');
-  const [section,setSection] = useState('');
+  useEffect(() => { fetchResources(); }, []);
 
-  useEffect(() => {
-    fetchResources();
-  }, []);
-
-  async function fetchResources() {
+  const fetchResources = async () => {
+    setLoading(true);
     const { data } = await supabase
       .from('resources')
       .select('*')
-      .order('created_at',{ascending:false});
-
-    setResources(data || []);
+      .order('created_at', { ascending: false });
+    if (data) {
+      setResources(data);
+      const map: Record<string, string> = {};
+      data.forEach(r => map[r.id] = r.section || '');
+      setEditSections(map);
+    }
     setLoading(false);
-  }
+  };
 
-  async function handleAddResource(e:any) {
-    e.preventDefault();
+  const flash = (id: string) => {
+    setSuccessId(id);
+    setTimeout(() => setSuccessId(null), 2000);
+  };
 
-    setSaving(true);
+  const handleAdd = async () => {
+    if (!newTitle) return alert('Please provide a title.');
+    if (newType !== 'upload' && !newUrl) return alert('Please provide a URL.');
+    if (newType === 'upload' && !newFile) return alert('Please select a file.');
 
-    const { error } = await supabase.from('resources').insert([{
-      id:`res_${Date.now()}`,
-      title,
-      file_type:fileType,
-      file_url:fileUrl,
-      category,
-      section:section || category
-    }]);
+    setIsAdding(true);
+    let finalUrl = newUrl;
+    let finalType = newType;
 
-    setSaving(false);
-
-    if(error){
-      alert(error.message);
-      return;
+    if (newType === 'upload' && newFile) {
+      const ext = newFile.name.split('.').pop();
+      const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(7)}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('study-materials')
+        .upload(path, newFile);
+      if (uploadError) { setIsAdding(false); return alert('Upload error: ' + uploadError.message); }
+      finalUrl = supabase.storage.from('study-materials').getPublicUrl(path).data.publicUrl;
+      finalType = newFile.type.startsWith('image/') ? 'image' : 'pdf';
     }
 
-    setTitle('');
-    setFileUrl('');
-    setSection('');
+    const { data, error } = await supabase.from('resources').insert([{
+      title: newTitle, file_type: finalType, file_url: finalUrl,
+      category: newCategory, section: newSection || newCategory,
+    }]).select();
 
-    fetchResources();
-  }
+    if (error) { alert('DB Error: ' + error.message); }
+    else if (data) {
+      setResources([data[0], ...resources]);
+      setEditSections(prev => ({ ...prev, [data[0].id]: data[0].section }));
+      setNewTitle(''); setNewUrl(''); setNewFile(null); setNewSection('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setShowForm(false);
+    }
+    setIsAdding(false);
+  };
 
-  async function handleDelete(id:string){
-    if(!confirm('Delete resource?')) return;
+  const handleUpdateCategory = async (id: string, cat: string) => {
+    setActionId(id);
+    const { error } = await supabase.from('resources').update({ category: cat }).eq('id', id);
+    if (!error) { setResources(resources.map(r => r.id === id ? { ...r, category: cat } : r)); flash(id); }
+    else alert('Failed to update category.');
+    setActionId(null);
+  };
 
-    await supabase
-      .from('resources')
-      .delete()
-      .eq('id',id);
+  const handleUpdateSection = async (id: string) => {
+    setActionId(id);
+    const sec = editSections[id];
+    const { error } = await supabase.from('resources').update({ section: sec }).eq('id', id);
+    if (!error) { setResources(resources.map(r => r.id === id ? { ...r, section: sec } : r)); flash(id); }
+    else alert('Failed to update subsection.');
+    setActionId(null);
+  };
 
-    setResources(resources.filter(r=>r.id!==id));
-  }
+  const deleteResource = async (id: string) => {
+    if (!confirm('Delete this file permanently?')) return;
+    setActionId(id);
+    await supabase.from('resources').delete().eq('id', id);
+    setResources(resources.filter(r => r.id !== id));
+    setActionId(null);
+  };
 
-  const filteredResources = useMemo(()=>{
-    return resources.filter(r=>{
+  const getTypeIcon = (type: string) => {
+    if (type === 'image') return <ImageIcon className="w-3.5 h-3.5" style={{ color: '#7C3AED' }} />;
+    if (type === 'pdf')   return <Download  className="w-3.5 h-3.5" style={{ color: '#EF4444' }} />;
+    return <LinkIcon className="w-3.5 h-3.5" style={{ color: '#3B82F6' }} />;
+  };
 
-      const matchesSearch =
-        r.title?.toLowerCase().includes(search.toLowerCase());
-
-      const matchesFilter =
-        filter === 'All' || r.category === filter;
-
-      return matchesSearch && matchesFilter;
-    });
-  },[resources,search,filter]);
-
-  const pdfCount =
-    resources.filter(r=>r.file_type==='pdf').length;
-
-  const linkCount =
-    resources.filter(r=>r.file_type==='link').length;
+  const getTypeBadge = (type: string) => {
+    const styles: Record<string, { bg: string; color: string }> = {
+      image: { bg: '#F5F3FF', color: '#7C3AED' },
+      pdf:   { bg: '#FEF2F2', color: '#DC2626' },
+      link:  { bg: '#EFF6FF', color: '#1D4ED8' },
+    };
+    const s = styles[type] || styles.link;
+    return (
+      <span className="badge" style={{ background: s.bg, color: s.color }}>
+        {getTypeIcon(type)} {type.toUpperCase()}
+      </span>
+    );
+  };
 
   return (
-    <div className="space-y-8 text-white">
+    <div className="space-y-5">
 
-      <div>
-        <h1 className="text-4xl font-black">
-          Resource Center
-        </h1>
-
-        <p className="text-white/60 mt-2">
-          Manage PDFs, notes and study material.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-
-        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
-          <FolderOpen className="w-6 h-6 text-emerald-400 mb-3" />
-          <div className="text-4xl font-black">{resources.length}</div>
-          <div className="text-white/50 mt-2">Total Resources</div>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold" style={{ color: '#0F172A' }}>Resources</h1>
+          <p className="text-sm mt-0.5" style={{ color: '#64748B' }}>
+            Upload and organise study materials for your students.
+          </p>
         </div>
-
-        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
-          <FileText className="w-6 h-6 text-rose-400 mb-3" />
-          <div className="text-4xl font-black">{pdfCount}</div>
-          <div className="text-white/50 mt-2">PDF Files</div>
-        </div>
-
-        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
-          <Globe className="w-6 h-6 text-blue-400 mb-3" />
-          <div className="text-4xl font-black">{linkCount}</div>
-          <div className="text-white/50 mt-2">Web Links</div>
-        </div>
-
-        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
-          <BarChart3 className="w-6 h-6 text-purple-400 mb-3" />
-          <div className="text-4xl font-black">{SUBJECTS.length}</div>
-          <div className="text-white/50 mt-2">Subjects</div>
-        </div>
-
-      </div>
-
-      <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
-
-        <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-          <Plus className="w-5 h-5 text-emerald-400" />
-          Upload Resource
-        </h2>
-
-        <form
-          onSubmit={handleAddResource}
-          className="grid md:grid-cols-5 gap-4"
+        <button
+          onClick={() => setShowForm(v => !v)}
+          className="btn btn-primary flex items-center gap-1.5"
         >
-
-          <input
-            value={title}
-            onChange={(e)=>setTitle(e.target.value)}
-            placeholder="Title"
-            className="p-3 rounded-xl bg-white/5 border border-white/10"
-          />
-
-          <input
-            value={fileUrl}
-            onChange={(e)=>setFileUrl(e.target.value)}
-            placeholder="File URL"
-            className="p-3 rounded-xl bg-white/5 border border-white/10"
-          />
-
-          <select
-            value={category}
-            onChange={(e)=>setCategory(e.target.value)}
-            className="p-3 rounded-xl bg-white/5 border border-white/10"
-          >
-            {SUBJECTS.map(s=><option key={s}>{s}</option>)}
-          </select>
-
-          <select
-            value={fileType}
-            onChange={(e)=>setFileType(e.target.value)}
-            className="p-3 rounded-xl bg-white/5 border border-white/10"
-          >
-            <option value="pdf">PDF</option>
-            <option value="link">Link</option>
-          </select>
-
-          <button
-            disabled={saving}
-            className="bg-emerald-600 rounded-xl font-bold"
-          >
-            {saving ? <Loader2 className="animate-spin mx-auto" /> : 'Save'}
-          </button>
-
-        </form>
+          <PlusCircle className="w-4 h-4" />
+          {showForm ? 'Cancel' : 'Upload File'}
+        </button>
       </div>
 
-      <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6">
-
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-            <input
-              value={search}
-              onChange={(e)=>setSearch(e.target.value)}
-              placeholder="Search resources..."
-              className="w-full pl-11 p-3 rounded-xl bg-white/5 border border-white/10"
-            />
+      {/* Upload form */}
+      {showForm && (
+        <div className="panel p-5 animate-fade-in">
+          <h2 className="text-sm font-semibold mb-4 flex items-center gap-2" style={{ color: '#0F172A' }}>
+            <UploadCloud className="w-4 h-4" style={{ color: '#6366F1' }} />
+            Add New Resource
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+            <div>
+              <label className="form-label">Type</label>
+              <select
+                className="form-input select"
+                value={newType}
+                onChange={e => { setNewType(e.target.value); setNewFile(null); }}
+              >
+                <option value="upload">Upload PDF / Image</option>
+                <option value="link">Web Link</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Title</label>
+              <input
+                type="text"
+                placeholder="e.g. Polity Notes Jan 2025"
+                className="form-input"
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="form-label">{newType === 'upload' ? 'File' : 'URL'}</label>
+              {newType === 'upload' ? (
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="form-input"
+                  style={{ paddingTop: 4, paddingBottom: 4 }}
+                  onChange={e => setNewFile(e.target.files?.[0] || null)}
+                />
+              ) : (
+                <input
+                  type="text"
+                  placeholder="https://…"
+                  className="form-input"
+                  value={newUrl}
+                  onChange={e => setNewUrl(e.target.value)}
+                />
+              )}
+            </div>
+            <div>
+              <label className="form-label">Subject</label>
+              <select
+                className="form-input"
+                value={newCategory}
+                onChange={e => setNewCategory(e.target.value)}
+              >
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
           </div>
+          <div className="mt-3 flex justify-end">
+            <button
+              onClick={handleAdd}
+              disabled={isAdding}
+              className="btn btn-primary"
+            >
+              {isAdding
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
+                : <><Save className="w-4 h-4" /> Save Resource</>
+              }
+            </button>
+          </div>
+        </div>
+      )}
 
-          <select
-            value={filter}
-            onChange={(e)=>setFilter(e.target.value)}
-            className="p-3 rounded-xl bg-white/5 border border-white/10"
-          >
-            <option>All</option>
-            {SUBJECTS.map(s=><option key={s}>{s}</option>)}
-          </select>
-
+      {/* Table */}
+      <div className="panel overflow-hidden">
+        <div className="panel-header">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4" style={{ color: '#6366F1' }} />
+            <span className="text-sm font-semibold" style={{ color: '#0F172A' }}>All Resources</span>
+          </div>
+          <span className="text-xs" style={{ color: '#94A3B8' }}>{resources.length} files</span>
         </div>
 
         {loading ? (
-          <div className="py-20 flex justify-center">
-            <Loader2 className="animate-spin w-8 h-8 text-emerald-400" />
+          <div className="flex flex-col items-center justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin mb-3" style={{ color: '#6366F1' }} />
+            <p className="text-sm font-medium" style={{ color: '#94A3B8' }}>Loading resources…</p>
+          </div>
+        ) : resources.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16" style={{ color: '#94A3B8' }}>
+            <FileText className="w-8 h-8 mb-3" />
+            <p className="text-sm font-medium">No resources yet</p>
+            <p className="text-xs mt-1">Click "Upload File" to add your first resource.</p>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
+          <div className="overflow-x-auto">
+            <table className="data-table" style={{ minWidth: 780 }}>
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Type</th>
+                  <th>Category</th>
+                  <th>Subsection</th>
+                  <th style={{ textAlign: 'center' }}>Delete</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resources.map(r => (
+                  <tr key={r.id}>
+                    {/* File title */}
+                    <td>
+                      <a
+                        href={r.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-semibold line-clamp-1 hover:underline"
+                        style={{ color: '#0F172A', maxWidth: 220, display: 'block' }}
+                      >
+                        {r.title}
+                      </a>
+                      {successId === r.id && (
+                        <span className="text-xs flex items-center gap-1 mt-0.5" style={{ color: '#059669' }}>
+                          <CheckCircle className="w-3 h-3" /> Saved
+                        </span>
+                      )}
+                    </td>
 
-            {filteredResources.map(res=>(
-              <div
-                key={res.id}
-                className="bg-white/5 border border-white/10 rounded-2xl p-5"
-              >
+                    {/* Type badge */}
+                    <td>{getTypeBadge(r.file_type || 'link')}</td>
 
-                <div className="flex items-center gap-3 mb-4">
-                  {res.file_type === 'pdf' ? (
-                    <FileText className="text-rose-400" />
-                  ) : (
-                    <LinkIcon className="text-blue-400" />
-                  )}
+                    {/* Category */}
+                    <td>
+                      <select
+                        className="form-input"
+                        style={{ width: 'auto', minWidth: 130 }}
+                        value={r.category || ''}
+                        onChange={e => handleUpdateCategory(r.id, e.target.value)}
+                        disabled={actionId === r.id}
+                      >
+                        {!CATEGORIES.includes(r.category) && (
+                          <option value={r.category}>{r.category} (old)</option>
+                        )}
+                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </td>
 
-                  <span className="text-xs text-white/50 uppercase">
-                    {res.file_type}
-                  </span>
-                </div>
+                    {/* Subsection */}
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. Ancient History"
+                          className="form-input"
+                          style={{ minWidth: 140, width: 160 }}
+                          value={editSections[r.id] ?? ''}
+                          onChange={e => setEditSections(prev => ({ ...prev, [r.id]: e.target.value }))}
+                        />
+                        {editSections[r.id] !== (r.section || '') && (
+                          <button
+                            onClick={() => handleUpdateSection(r.id)}
+                            className="btn btn-sm btn-secondary flex items-center gap-1"
+                          >
+                            <Save className="w-3 h-3" /> Save
+                          </button>
+                        )}
+                      </div>
+                    </td>
 
-                <h3 className="font-bold text-lg mb-2">
-                  {res.title}
-                </h3>
-
-                <div className="flex gap-2 mb-4">
-                  <span className="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs">
-                    {res.category}
-                  </span>
-
-                  <span className="px-2 py-1 rounded-lg bg-white/5 text-white/60 text-xs">
-                    {res.section || 'General'}
-                  </span>
-                </div>
-
-                <div className="flex gap-2">
-                  <a
-                    href={res.file_url}
-                    target="_blank"
-                    className="flex-1 text-center py-2 rounded-lg bg-blue-500/10 text-blue-400"
-                  >
-                    View
-                  </a>
-
-                  <button
-                    onClick={()=>handleDelete(res.id)}
-                    className="p-2 rounded-lg bg-rose-500/10 text-rose-400"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-
-              </div>
-            ))}
-
+                    {/* Delete */}
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        onClick={() => deleteResource(r.id)}
+                        disabled={actionId === r.id}
+                        className="btn btn-icon btn-sm"
+                        style={{ color: '#EF4444', background: '#FEF2F2' }}
+                        title="Delete"
+                      >
+                        {actionId === r.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Trash2 className="w-3.5 h-3.5" />
+                        }
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-
       </div>
-
     </div>
   );
 }

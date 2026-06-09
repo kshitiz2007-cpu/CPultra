@@ -2,10 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { 
-  CreditCard, CheckCircle, XCircle, Clock, 
-  Search, Loader2, ShieldCheck, AlertCircle 
-} from 'lucide-react';
+import { CreditCard, CheckCircle, XCircle, Search, Loader2, ShieldCheck } from 'lucide-react';
 
 interface Payment {
   id: string;
@@ -19,175 +16,196 @@ interface Payment {
   quizzes: { title: string };
 }
 
+type Tab = 'pending' | 'approved' | 'rejected';
+
 export default function PaymentsManager() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  const [activeTab, setActiveTab] = useState<Tab>('pending');
 
-  useEffect(() => {
-    fetchPayments();
-  }, []);
+  useEffect(() => { fetchPayments(); }, []);
 
   const fetchPayments = async () => {
     setLoading(true);
-    // Assuming you have a 'transactions' or 'payments' table linked to profiles and quizzes
-    // For now, we will fetch standard data. (If this table doesn't exist yet, it will return empty safely).
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('transactions')
-      .select(`
-        *,
-        profiles:user_id (name, email),
-        quizzes:quiz_id (title)
-      `)
+      .select('*, profiles:user_id (name, email), quizzes:quiz_id (title)')
       .order('created_at', { ascending: false });
-
     if (data) setPayments(data as any);
     setLoading(false);
   };
 
-  const updateStatus = async (paymentId: string, newStatus: 'approved' | 'rejected') => {
-    const originalPayments = [...payments];
-    
-    // Optimistic UI update
-    setPayments(payments.map(p => p.id === paymentId ? { ...p, status: newStatus } : p));
-
-    const { error } = await supabase
-      .from('transactions')
-      .update({ status: newStatus })
-      .eq('id', paymentId);
-
-    if (error) {
-      alert('Failed to update status');
-      setPayments(originalPayments); // Revert on failure
-    } else if (newStatus === 'approved') {
-      // Logic to actually unlock the quiz for the user would go here 
-      // (e.g., inserting into a 'purchases' table)
-    }
+  const updateStatus = async (id: string, status: 'approved' | 'rejected') => {
+    const orig = [...payments];
+    setPayments(payments.map(p => p.id === id ? { ...p, status } : p));
+    const { error } = await supabase.from('transactions').update({ status }).eq('id', id);
+    if (error) { alert('Failed to update status'); setPayments(orig); }
   };
 
-  const filteredPayments = payments.filter(p => 
+  const pendingCount = payments.filter(p => p.status === 'pending').length;
+
+  const filtered = payments.filter(p =>
     p.status === activeTab &&
-    (p.transaction_id.toLowerCase().includes(searchQuery.toLowerCase()) || 
-     p.profiles?.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    (p.transaction_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+     p.profiles?.name?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'pending',  label: 'Pending' },
+    { key: 'approved', label: 'Approved' },
+    { key: 'rejected', label: 'Rejected' },
+  ];
+
   return (
-    <div className="space-y-8 animate-fade-in">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <h2 className="text-2xl font-black text-emerald-950 font-serif tracking-tight flex items-center gap-3">
-          <CreditCard className="w-8 h-8 text-emerald-600" /> Revenue & Verifications
-        </h2>
-        
-        <div className="bg-white/40 p-1 rounded-2xl border border-white/60 shadow-sm backdrop-blur-md inline-flex">
-          {(['pending', 'approved', 'rejected'] as const).map((tab) => (
-            <button 
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-6 py-2.5 rounded-xl text-sm font-bold capitalize transition-all duration-300 ${
-                activeTab === tab 
-                  ? 'bg-white text-emerald-800 shadow-sm' 
-                  : 'text-gray-500 hover:text-emerald-700'
-              }`}
-            >
-              {tab}
-              {tab === 'pending' && payments.filter(p => p.status === 'pending').length > 0 && (
-                <span className="ml-2 bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full">
-                  {payments.filter(p => p.status === 'pending').length}
-                </span>
-              )}
-            </button>
-          ))}
+    <div className="space-y-5">
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold" style={{ color: '#0F172A' }}>Payments</h1>
+          <p className="text-sm mt-0.5" style={{ color: '#64748B' }}>
+            Verify UPI references before unlocking tests.
+          </p>
+        </div>
+        <div className="search-wrap w-full sm:w-64">
+          <Search className="search-icon w-3.5 h-3.5" />
+          <input
+            type="text"
+            placeholder="Search by name or UPI ID…"
+            className="form-input"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
         </div>
       </div>
 
-      <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/60 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-white/60 bg-white/20 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div>
-            <h3 className="font-bold text-gray-900">Transaction History</h3>
-            <p className="text-xs text-gray-500 font-medium mt-1">Verify UPI references before unlocking tests.</p>
-          </div>
-          <div className="relative w-full md:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input 
-              type="text" 
-              placeholder="Search by Name or UPI ID..." 
-              className="glass-input w-full pl-9 py-2 text-sm rounded-xl"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-        </div>
+      {/* Segment tabs */}
+      <div className="segment">
+        {tabs.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={`segment-item flex items-center gap-1.5 ${activeTab === key ? 'active' : ''}`}
+          >
+            {label}
+            {key === 'pending' && pendingCount > 0 && (
+              <span
+                className="w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center"
+                style={{ background: '#EF4444', color: 'white' }}
+              >
+                {pendingCount}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
-        <div className="p-0 overflow-x-auto">
-          {loading ? (
-            <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
-          ) : filteredPayments.length === 0 ? (
-            <div className="p-12 text-center flex flex-col items-center opacity-60">
-              <ShieldCheck className="w-12 h-12 text-gray-400 mb-3" />
-              <p className="text-sm font-bold text-gray-600">No {activeTab} transactions found.</p>
-            </div>
-          ) : (
-            <table className="w-full text-left text-sm">
-              <thead className="bg-white/40 text-xs uppercase text-gray-500 font-bold tracking-wider border-b border-white/60">
+      {/* Table */}
+      <div className="panel overflow-hidden">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin mb-3" style={{ color: '#6366F1' }} />
+            <p className="text-sm font-medium" style={{ color: '#94A3B8' }}>Loading transactions…</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16" style={{ color: '#94A3B8' }}>
+            <ShieldCheck className="w-8 h-8 mb-3" />
+            <p className="text-sm font-medium">No {activeTab} transactions</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="data-table" style={{ minWidth: 680 }}>
+              <thead>
                 <tr>
-                  <th className="px-6 py-4">Student</th>
-                  <th className="px-6 py-4">Module / Test</th>
-                  <th className="px-6 py-4">UPI Ref ID</th>
-                  <th className="px-6 py-4">Date</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
+                  <th>Student</th>
+                  <th>Module</th>
+                  <th>UPI Ref</th>
+                  <th>Date</th>
+                  <th style={{ textAlign: 'right' }}>
+                    {activeTab === 'pending' ? 'Verify' : 'Status'}
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/40">
-                {filteredPayments.map((payment) => (
-                  <tr key={payment.id} className="hover:bg-white/30 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-gray-900">{payment.profiles?.name || 'Unknown'}</div>
-                      <div className="text-xs text-gray-500">{payment.profiles?.email || 'N/A'}</div>
+              <tbody>
+                {filtered.map(p => (
+                  <tr key={p.id}>
+                    {/* Student */}
+                    <td>
+                      <div className="text-sm font-semibold" style={{ color: '#0F172A' }}>
+                        {p.profiles?.name || 'Unknown'}
+                      </div>
+                      <div className="text-xs" style={{ color: '#94A3B8' }}>
+                        {p.profiles?.email}
+                      </div>
                     </td>
-                    <td className="px-6 py-4 font-semibold text-emerald-800">
-                      {payment.quizzes?.title || 'Unknown Quiz'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="font-mono bg-white/60 px-2 py-1 rounded text-gray-700 font-bold">
-                        {payment.transaction_id}
+
+                    {/* Module */}
+                    <td>
+                      <span className="text-sm font-medium" style={{ color: '#6366F1' }}>
+                        {p.quizzes?.title || 'Unknown Quiz'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-gray-500 text-xs font-semibold">
-                      {new Date(payment.created_at).toLocaleDateString()}
+
+                    {/* UPI ref */}
+                    <td>
+                      <code
+                        className="text-xs px-2 py-1 rounded font-mono"
+                        style={{ background: '#F8FAFC', color: '#475569', border: '1px solid #E2E8F0' }}
+                      >
+                        {p.transaction_id}
+                      </code>
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      {payment.status === 'pending' ? (
-                        <div className="flex justify-end gap-2">
-                          <button 
-                            onClick={() => updateStatus(payment.id, 'approved')}
-                            className="p-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-colors"
-                            title="Approve & Unlock"
+
+                    {/* Date */}
+                    <td>
+                      <span className="text-xs font-medium" style={{ color: '#64748B' }}>
+                        {new Date(p.created_at).toLocaleDateString('en-GB', {
+                          day: 'numeric', month: 'short', year: 'numeric',
+                        })}
+                      </span>
+                    </td>
+
+                    {/* Actions */}
+                    <td>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {p.status === 'pending' ? (
+                          <>
+                            <button
+                              onClick={() => updateStatus(p.id, 'approved')}
+                              className="btn btn-sm btn-success flex items-center gap-1"
+                              title="Approve & unlock"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" /> Approve
+                            </button>
+                            <button
+                              onClick={() => updateStatus(p.id, 'rejected')}
+                              className="btn btn-sm btn-danger flex items-center gap-1"
+                              title="Reject"
+                            >
+                              <XCircle className="w-3.5 h-3.5" /> Reject
+                            </button>
+                          </>
+                        ) : (
+                          <span
+                            className="badge"
+                            style={
+                              p.status === 'approved'
+                                ? { background: '#ECFDF5', color: '#059669' }
+                                : { background: '#FEF2F2', color: '#DC2626' }
+                            }
                           >
-                            <CheckCircle className="w-5 h-5" />
-                          </button>
-                          <button 
-                            onClick={() => updateStatus(payment.id, 'rejected')}
-                            className="p-2 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg transition-colors"
-                            title="Reject"
-                          >
-                            <XCircle className="w-5 h-5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                          payment.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                        }`}>
-                          {payment.status}
-                        </span>
-                      )}
+                            {p.status === 'approved' ? '✓' : '✕'} {p.status}
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
