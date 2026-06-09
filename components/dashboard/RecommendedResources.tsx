@@ -1,102 +1,53 @@
 'use client';
 
-import {
-  BookOpen,
-  FileText,
-  ExternalLink,
-  ArrowRight,
-} from 'lucide-react';
-
-export interface Resource {
-  id: string;
-  title: string;
-  category: string;
-  description?: string;
-  file_url?: string;
-}
+import { FileText, ArrowUpRight, Link2 } from 'lucide-react';
 
 interface RecommendedResourcesProps {
-  resources: Resource[];
-  onViewAll?: () => void;
+  resources: any[];
 }
 
-export default function RecommendedResources({
-  resources,
-  onViewAll,
-}: RecommendedResourcesProps) {
+export default function RecommendedResources({ resources }: RecommendedResourcesProps) {
   return (
-    <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] backdrop-blur-2xl p-6 md:p-8">
-
-      <div className="absolute -top-20 left-0 w-72 h-72 bg-indigo-500/10 rounded-full blur-[100px]" />
-
-      <div className="relative z-10">
-
-        <div className="flex items-center justify-between mb-6">
-
-          <div>
-            <h2 className="text-2xl font-black text-white">
-              Recommended Resources
-            </h2>
-
-            <p className="text-white/50 text-sm mt-1">
-              Curated study materials for your preparation.
-            </p>
+    <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 backdrop-blur-2xl space-y-4">
+      <h3 className="font-bold text-lg text-white">Recommended Resources</h3>
+      <div className="space-y-3">
+        {resources.length === 0 ? (
+          <div className="text-center py-4 text-xs text-white/30 font-medium">
+            No active learning artifacts streamed.
           </div>
-
-          <button
-            onClick={onViewAll}
-            className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 font-semibold"
-          >
-            View All
-            <ArrowRight className="w-4 h-4" />
-          </button>
-
-        </div>
-
-        <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
-
-          {resources.map((resource) => (
+        ) : (
+          resources.map((file, idx) => (
             <div
-              key={resource.id}
-              className="group bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-5 transition-all duration-300 hover:-translate-y-1"
+              key={file.id || idx}
+              className="flex items-center justify-between p-4 rounded-xl border border-white/5 bg-white/[0.01] hover:bg-white/[0.02] transition-colors animate-fade-in"
             >
-
-              <div className="flex items-center justify-between">
-
-                <div className="p-3 rounded-xl bg-emerald-500/10">
-                  <BookOpen className="w-5 h-5 text-emerald-400" />
+              <div className="flex items-center gap-3 overflow-hidden">
+                <div className="p-2 rounded-lg bg-white/5 shrink-0">
+                  {file.file_type === 'pdf' ? (
+                    <FileText className="h-4 w-4 text-rose-400" />
+                  ) : (
+                    <Link2 className="h-4 w-4 text-blue-400" />
+                  )}
                 </div>
-
-                <span className="text-xs px-2 py-1 rounded-full bg-white/5 text-white/60">
-                  {resource.category}
-                </span>
-
+                <div className="overflow-hidden">
+                  <h4 className="text-xs font-bold text-white truncate">{file.title}</h4>
+                  <span className="inline-block px-2 py-0.5 rounded bg-white/5 text-[9px] text-white/50 uppercase tracking-wider font-semibold mt-1">
+                    {file.category || 'General'}
+                  </span>
+                </div>
               </div>
-
-              <h3 className="mt-4 text-white font-bold line-clamp-2">
-                {resource.title}
-              </h3>
-
-              <p className="mt-2 text-sm text-white/50 line-clamp-3">
-                {resource.description || 'Premium UPSC study material'}
-              </p>
-
-              <a
-                href={resource.file_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-2 text-emerald-400 hover:text-emerald-300 text-sm font-semibold"
+              <a 
+                href={file.file_url} 
+                target="_blank" 
+                rel="noreferrer"
+                className="p-2 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white rounded-lg transition-colors shrink-0 ml-2"
               >
-                Open Resource
-                <ExternalLink className="w-4 h-4" />
+                <ArrowUpRight className="h-4 w-4" />
               </a>
-
             </div>
-          ))}
-
-        </div>
-
+          ))
+        )}
       </div>
-    </section>
+    </div>
   );
 }
