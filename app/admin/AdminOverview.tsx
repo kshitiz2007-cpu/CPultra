@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { Loader2, TrendingUp, Award, Activity } from 'lucide-react';
+import { 
+  Loader2, 
+  TrendingUp, 
+  Award, 
+  Activity, 
+  Users, 
+  Layers, 
+  AlertTriangle, 
+  CheckCircle2 
+} from 'lucide-react';
 
 interface SubjectMetric {
   subject: string;
@@ -14,6 +23,12 @@ interface Performer {
   score: number;
 }
 
+interface RecentActivityItem {
+  name: string;
+  subject: string;
+  score: number;
+}
+
 interface AdminOverviewProps {
   setActiveTab: (tabId: string) => void;
 }
@@ -21,8 +36,14 @@ interface AdminOverviewProps {
 export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
   const [subjects, setSubjects] = useState<SubjectMetric[]>([]);
   const [performers, setPerformers] = useState<Performer[]>([]);
+  const [recentActivities, setRecentActivities] = useState<RecentActivityItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // New Summary Card States
+  const [totalAttempts, setTotalAttempts] = useState<number>(0);
+  const [totalStudents, setTotalStudents] = useState<number>(0);
+  const [toughestSubject, setToughestSubject] = useState<{ name: string; avg: number } | null>(null);
 
   useEffect(() => {
     async function fetchLiveMetrics() {
@@ -30,8 +51,6 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
         setLoading(true);
         setError(null);
         
-        // 1. Fetch rows from your existing production table: 'attempts'
-        // Selecting * to safely pull whichever columns hold your names, subjects, and scores
         const { data, error: dbError } = await supabase
           .from('attempts')
           .select('*');
@@ -39,17 +58,21 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
         if (dbError) throw dbError;
 
         if (data && data.length > 0) {
-          
-          // ─── DATA MAP SAFEGUARDS ───
-          // Dynamically matches your column keys if named slightly differently
-          const getStudentName = (row: any) => row.student_name || row.user_name || row.email || row.student_id || 'Unknown Student';
+          // Dynamic database column mapping fallback helpers
+          const getStudentName = (row: any) => row.student_name || row.user_name || row.email || row.student_id || 'Student';
           const getSubject = (row: any) => row.subject || row.category || row.quiz_title || 'General';
           const getScore = (row: any) => {
             const val = row.score_percentage ?? row.score ?? row.percentage ?? row.marks;
             return typeof val === 'number' ? val : parseInt(val) || 0;
           };
 
-          // 2. COMPUTE SUBJECT AVERAGES
+          // 1. STATS OVERVIEW COMPUTATIONS
+          setTotalAttempts(data.length);
+
+          const uniqueStudents = new Set(data.map(row => getStudentName(row)));
+          setTotalStudents(uniqueStudents.size);
+
+          // 2. COMPUTE SUBJECT AVERAGES & TOUGHEST SUBJECT
           const rawSubjectGroups: { [key: string]: { total: number; count: number } } = {};
           
           data.forEach((row) => {
@@ -70,9 +93,14 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
           
           setSubjects(calculatedSubjects);
 
-          // 3. COMPUTE TOP PERFORMERS (Highest score achieved per unique user)
+          // Find lowest average subject
+          if (calculatedSubjects.length > 0) {
+            const sortedByLowest = [...calculatedSubjects].sort((a, b) => a.average - b.average);
+            setToughestSubject({ name: sortedByLowest[0].subject, avg: sortedByLowest[0].average });
+          }
+
+          // 3. COMPUTE TOP PERFORMERS
           const highScoresPerStudent: { [key: string]: number } = {};
-          
           data.forEach((row) => {
             const studentName = getStudentName(row);
             const currentScore = getScore(row);
@@ -87,13 +115,21 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
               name,
               score: highScoresPerStudent[name],
             }))
-            .sort((a, b) => b.score - a.score) // Order highest scores first
-            .slice(0, 3); // Grab top 3 leaderboard positions
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 3);
 
           setPerformers(sortedPerformers);
+
+          // 4. MAP REAL RECENT ACTIVITY LOGS (Last 4 row entries)
+          const latestLogs = data.slice(-4).reverse().map(row => ({
+            name: getStudentName(row),
+            subject: getSubject(row),
+            score: getScore(row)
+          }));
+          setRecentActivities(latestLogs);
         }
       } catch (err: any) {
-        console.error('Failed processing metrics from attempts table:', err);
+        console.error('Failed processing administrative data dashboards:', err);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -107,7 +143,7 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
     return (
       <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/10 rounded-[2rem] p-16 flex flex-col items-center justify-center text-white/50">
         <Loader2 className="w-10 h-10 animate-spin text-emerald-400 mb-3" />
-        <p className="text-sm font-medium tracking-wide">Syncing real-time records...</p>
+        <p className="text-sm font-medium tracking-wide">Assembling dynamic metrics engine...</p>
       </div>
     );
   }
@@ -122,11 +158,49 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       
+      {/* NEW HEADER METRIC HIGHLIGHT ROW */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        
+        <div className="bg-white/[0.02] backdrop-blur-xl border border-white/5 rounded-2xl p-5 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-white/40">Total Quiz Submissions</p>
+            <p className="text-3xl font-black text-white mt-1">{totalAttempts}</p>
+          </div>
+          <div className="h-12 w-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20">
+            <Layers className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white/[0.02] backdrop-blur-xl border border-white/5 rounded-2xl p-5 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-white/40">Active Student Base</p>
+            <p className="text-3xl font-black text-white mt-1">{totalStudents}</p>
+          </div>
+          <div className="h-12 w-12 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400 border border-purple-500/20">
+            <Users className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white/[0.02] backdrop-blur-xl border border-white/5 rounded-2xl p-5 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-white/40">Critical Weak Spot</p>
+            <p className="text-lg font-bold text-rose-400 mt-1.5 truncate max-w-[180px]">
+              {toughestSubject ? `${toughestSubject.name} (${toughestSubject.avg}%)` : 'None'}
+            </p>
+          </div>
+          <div className="h-12 w-12 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-400 border border-rose-500/20">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+        </div>
+
+      </div>
+
+      {/* CORE GRAPHICAL ANALYTICS COLUMN ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* SUBJECT ANALYTICS CARD */}
+        {/* SUBJECT ANALYTICS */}
         <div className="bg-white/[0.03] backdrop-blur-2xl border border-white/10 rounded-[2rem] p-6 md:p-8 shadow-2xl relative overflow-hidden">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
@@ -157,7 +231,7 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
           </div>
         </div>
 
-        {/* TOP PERFORMERS CARD */}
+        {/* TOP PERFORMERS LEADERBOARD */}
         <div className="bg-white/[0.03] backdrop-blur-2xl border border-white/10 rounded-[2rem] p-6 md:p-8 shadow-2xl relative overflow-hidden">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
@@ -196,15 +270,43 @@ export default function AdminOverview({ setActiveTab }: AdminOverviewProps) {
 
       </div>
 
-      {/* RECENT ACTIVITY BLOCK */}
+      {/* REPLACED RECENT ACTIVITY STREAM */}
       <div className="bg-white/[0.03] backdrop-blur-2xl border border-white/10 rounded-[2rem] p-6 md:p-8 shadow-2xl">
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
             <Activity className="w-5 h-5" />
           </div>
-          <h2 className="text-xl font-bold tracking-tight">Recent Activity</h2>
+          <h2 className="text-xl font-bold tracking-tight">Recent Activity Stream</h2>
         </div>
-        <p className="text-sm text-white/50">Realtime live system logs and security logs will stream here...</p>
+
+        <div className="divide-y divide-white/5 space-y-3.5">
+          {recentActivities.length > 0 ? (
+            recentActivities.map((log, index) => (
+              <div key={index} className="flex items-center justify-between pt-3.5 first:pt-0 group">
+                <div className="flex items-center gap-3.5">
+                  <div className="h-9 w-9 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 group-hover:text-emerald-400 transition-colors">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white/90">{log.name}</p>
+                    <p className="text-xs text-white/40">Completed quiz module under <span className="text-cyan-400/80">{log.subject}</span></p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className={`text-sm font-bold px-3 py-1 rounded-full ${
+                    log.score >= 75 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10' :
+                    log.score >= 50 ? 'bg-amber-500/10 text-amber-400 border border-amber-500/10' :
+                    'bg-rose-500/10 text-rose-400 border border-rose-500/10'
+                  }`}>
+                    {log.score}% Verified
+                  </span>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-white/40 text-sm">No recent quiz submissions incoming.</p>
+          )}
+        </div>
       </div>
 
     </div>
