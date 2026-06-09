@@ -1,16 +1,58 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { FilePlus, Loader2, CheckCircle } from 'lucide-react';
+import { FilePlus, Loader2, CheckCircle, Upload, Link2 } from 'lucide-react';
 
 export default function CurrentAffairsManager() {
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('Polity');
+  const [category, setCategory] = useState('Polity & Governance');
   const [summary, setSummary] = useState('');
   const [fileUrl, setFileUrl] = useState('');
+  
+  // Upload states
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle local file upload to Supabase Storage
+  const handleLocalFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingFile(true);
+      setUploadSuccess(false);
+
+      // Create a clean unique filename to avoid collision duplicates
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+      const filePath = `uploads/${fileName}`;
+
+      // 1. Upload file to Supabase storage bucket
+      const { data, error: uploadError } = await supabase.storage
+        .from('current-affairs-files')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Retrieve public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('current-affairs-files')
+        .getPublicUrl(filePath);
+
+      setFileUrl(publicUrl);
+      setUploadSuccess(true);
+    } catch (err: any) {
+      console.error('Storage upload failed:', err);
+      alert('File upload failed: ' + err.message);
+    } finally {
+      setUploadingFile(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +72,8 @@ export default function CurrentAffairsManager() {
       setTitle('');
       setSummary('');
       setFileUrl('');
+      setUploadSuccess(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err: any) {
       alert('Error publishing update: ' + err.message);
     } finally {
@@ -62,7 +106,7 @@ export default function CurrentAffairsManager() {
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g., Summary of Economic Survey 2026 or India-Oman Bilateral Trade Talks"
+            placeholder="e.g., Summary of Economic Survey 2026"
             className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 outline-none text-white placeholder:text-white/20 focus:border-emerald-500 transition-colors"
           />
         </div>
@@ -93,21 +137,76 @@ export default function CurrentAffairsManager() {
           />
         </div>
 
-        <div>
-          <label className="block text-white/70 font-semibold mb-2">Document attachment URL (Optional)</label>
-          <input
-            type="text"
-            value={fileUrl}
-            onChange={(e) => setFileUrl(e.target.value)}
-            placeholder="e.g., https://your-supabase-storage-link.pdf"
-            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 outline-none text-white placeholder:text-white/20 focus:border-emerald-500 transition-colors"
-          />
+        {/* ATTACHMENT SECTION (LOCAL STORAGE + BACKUP LINK INPUT) */}
+        <div className="space-y-3">
+          <label className="block text-white/70 font-semibold">Document Attachment (PDF / Images)</label>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Local Upload Trigger Box */}
+            <div className="relative">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleLocalFileUpload}
+                accept=".pdf,.png,.jpg,.jpeg"
+                className="hidden"
+                id="local-file-picker"
+                disabled={uploadingFile}
+              />
+              <label
+                htmlFor="local-file-picker"
+                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed text-xs font-bold cursor-pointer transition-all ${
+                  uploadSuccess
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                    : 'bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                {uploadingFile ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                    <span>Uploading file...</span>
+                  </>
+                ) : uploadSuccess ? (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    <span>File Uploaded Successfully</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4 text-emerald-400" />
+                    <span>Upload from Local Storage</span>
+                  </>
+                )}
+              </label>
+            </div>
+
+            {/* Manual URL Input Trigger Box */}
+            <div className="relative">
+              <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+              <input
+                type="text"
+                value={fileUrl}
+                onChange={(e) => {
+                  setFileUrl(e.target.value);
+                  if (e.target.value === '') setUploadSuccess(false);
+                }}
+                placeholder="Or paste external document URL..."
+                className="w-full pl-9 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 outline-none text-xs text-white placeholder:text-white/20 focus:border-emerald-500 transition-colors"
+              />
+            </div>
+          </div>
+          
+          {fileUrl && (
+            <p className="text-[11px] text-emerald-400 truncate bg-emerald-500/5 px-3 py-1.5 rounded-lg border border-emerald-500/10">
+              <strong>Target URL:</strong> {fileUrl}
+            </p>
+          )}
         </div>
 
         <button
           type="submit"
-          disabled={submitting}
-          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-90 font-bold py-4 rounded-xl shadow-lg transition-opacity active:scale-[0.99] disabled:opacity-50"
+          disabled={submitting || uploadingFile}
+          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-90 font-bold py-4 rounded-xl shadow-lg transition-opacity active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting ? (
             <Loader2 className="w-5 h-5 animate-spin" />
