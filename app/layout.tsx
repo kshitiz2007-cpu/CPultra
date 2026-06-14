@@ -9,8 +9,11 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "CivilPrep by Gyankunj Academy",
-  description: "Admin dashboard for CivilPrep — India's civil services exam preparation platform.",
+  title: "CivilPrep Ultra - Gyankunj Academy",
+  description: "Complete UPSC, MPPSC & SSC preparation platform with AI-powered mock tests, resources & analytics.",
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({
@@ -21,9 +24,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} h-full`}
+      className={`${inter.variable} h-full dark`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full bg-surface text-text-primary dark:bg-gray-950 dark:text-white transition-colors">
+        {children}
+      </body>
     </html>
   );
 }
